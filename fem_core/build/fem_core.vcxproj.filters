@@ -1,0 +1,51 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="C:\Users\Scrollend\Downloads\fem_heat3d_v1.1\fem_heat3d\fem_core\mesh.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Scrollend\Downloads\fem_heat3d_v1.1\fem_heat3d\fem_core\assembly.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Scrollend\Downloads\fem_heat3d_v1.1\fem_heat3d\fem_core\solver.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Scrollend\Downloads\fem_heat3d_v1.1\fem_heat3d\fem_core\flux.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Scrollend\Downloads\fem_heat3d_v1.1\fem_heat3d\fem_core\api.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="C:\Users\Scrollend\Downloads\fem_heat3d_v1.1\fem_heat3d\fem_core\mesh.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Scrollend\Downloads\fem_heat3d_v1.1\fem_heat3d\fem_core\assembly.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Scrollend\Downloads\fem_heat3d_v1.1\fem_heat3d\fem_core\solver.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Scrollend\Downloads\fem_heat3d_v1.1\fem_heat3d\fem_core\flux.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Scrollend\Downloads\fem_heat3d_v1.1\fem_heat3d\fem_core\api.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Scrollend\Downloads\fem_heat3d_v1.1\fem_heat3d\fem_core\sparse.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\Scrollend\Downloads\fem_heat3d_v1.1\fem_heat3d\fem_core\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{6C5EF2C6-9AA6-3BDA-AEAF-50D4220C62A5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{A6F51034-F14B-3D54-9AB3-9A2EDC3FDBF6}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

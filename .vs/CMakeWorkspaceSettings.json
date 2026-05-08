@@ -1,0 +1,4 @@
+{
+  "enableCMake": true,
+  "sourceDirectory": "fem_core"
+}
