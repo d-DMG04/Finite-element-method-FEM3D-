@@ -23,7 +23,9 @@ from .core_bridge import (
 from .mesh import (
     BoxPreset, Material, MeshInfo,
     MATERIALS, PRESETS,
-    compute_mesh_info, material_by_name,
+    SUPPORTED_IMPORT_EXTENSIONS,
+    compute_mesh_info, import_mesh_file, import_msh, import_stl,
+    import_step, import_vtu, material_by_name,
 )
 from .problem import (
     BoundaryCondition, BoxGeometry, PointSource, Problem, VolumeSource,
@@ -43,7 +45,9 @@ __all__ = [
     # mesh
     "BoxPreset", "Material", "MeshInfo",
     "MATERIALS", "PRESETS",
-    "compute_mesh_info", "material_by_name",
+    "SUPPORTED_IMPORT_EXTENSIONS",
+    "compute_mesh_info", "import_mesh_file", "import_msh", "import_stl",
+    "import_step", "import_vtu", "material_by_name",
     # problem
     "BoundaryCondition", "BoxGeometry", "PointSource", "Problem", "VolumeSource",
     "template_all_convection", "template_bottom_heat_top_cool", "template_reset",

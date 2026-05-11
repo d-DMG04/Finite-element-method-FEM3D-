@@ -299,3 +299,58 @@ class TestLoadMesh:
         # Все узлы граничной грани z=0 должны иметь T=50.
         for face_node_idx in (0, 1, 2, 3):
             assert abs(T[face_node_idx] - 50.0) < 1e-6
+
+    def test_supported_extensions_listed(self):
+        """Проверка, что SUPPORTED_IMPORT_EXTENSIONS экспортируется."""
+        from fem3d import SUPPORTED_IMPORT_EXTENSIONS
+        # Минимум — поддержка MSH, VTU, STL, STEP.
+        assert ".msh" in SUPPORTED_IMPORT_EXTENSIONS
+        assert ".vtu" in SUPPORTED_IMPORT_EXTENSIONS
+        assert ".stl" in SUPPORTED_IMPORT_EXTENSIONS
+        assert ".step" in SUPPORTED_IMPORT_EXTENSIONS
+
+    def test_import_mesh_file_unsupported(self):
+        """Неподдерживаемое расширение → понятная ошибка."""
+        from fem3d import import_mesh_file
+        try:
+            import_mesh_file("/tmp/nonexistent.xyz")
+        except Exception as exc:
+            assert "Неподдерживаемое расширение" in str(exc) or \
+                   "Unsupported" in str(exc)
+            return
+        assert False, "ожидалось исключение"
+
+
+# =============================================================================
+# Тесты переопределения Дирихле по узлам (используется в T3).
+# =============================================================================
+
+class TestNodeDirichlet:
+
+    def test_set_node_dirichlet_overrides_face(self):
+        """fem_set_node_dirichlet переопределяет значение T в узле."""
+        with CoreBridge() as br:
+            br.generate_box(0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 4, 4, 4)
+            br.set_material(1.0, 0.0)
+            # Все грани — Дирихле T = 0.
+            for f in range(6):
+                br.set_bc(f, BC_DIRICHLET, T0=0.0)
+            # Зафиксируем узел 0 (это (0,0,0)) в значении 100.
+            br.set_node_dirichlet(0, 100.0)
+            br.solve(tol=1e-12)
+            T = br.get_temperature()
+            assert abs(T[0] - 100.0) < 1e-9, \
+                f"узел 0 должен быть T=100, получено {T[0]}"
+
+    def test_clear_node_dirichlet_resets(self):
+        """clear_node_dirichlet возвращает решение к базовому."""
+        with CoreBridge() as br:
+            br.generate_box(0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 4, 4, 4)
+            br.set_material(1.0, 0.0)
+            for f in range(6):
+                br.set_bc(f, BC_DIRICHLET, T0=10.0)
+            br.set_node_dirichlet(0, 999.0)
+            br.clear_node_dirichlet()
+            br.solve(tol=1e-12)
+            T = br.get_temperature()
+            assert abs(T[0] - 10.0) < 1e-9
