@@ -16,7 +16,7 @@ from __future__ import annotations
 import ctypes
 import os
 import sys
-from ctypes import POINTER, byref, c_double, c_int32
+from ctypes import CFUNCTYPE, POINTER, byref, c_double, c_int32
 from typing import Optional, Tuple
 
 import numpy as np
@@ -74,6 +74,31 @@ except OSError as exc:  # pragma: no cover
         "переменную окружения FEM_CORE_LIB."
     ) from exc
 
+
+class CoreError(RuntimeError):
+    """Ошибка, возвращённая C++ ядром."""
+
+
+def _try_bind(name: str, argtypes, restype):
+    """Безопасно связывает функцию из бинарника. Если функции нет,
+    возвращает заглушку, поднимающую CoreError при вызове.
+
+    Это позволяет программе запускаться со старой .so/.dll, в которой
+    отсутствуют функции, добавленные в новых версиях."""
+    try:
+        f = getattr(_lib, name)
+        f.argtypes = argtypes; f.restype = restype
+        return f, True
+    except AttributeError:
+        def _stub(*args, **kwargs):
+            raise CoreError(
+                f"Функция '{name}' отсутствует в текущем бинарнике "
+                f"fem_core. Для использования этой возможности нужно "
+                f"пересобрать C++ ядро.\n"
+                f"Команда: cd fem_core && make")
+        return _stub, False
+
+
 # =============================================================================
 # Описание сигнатур C-API.
 # =============================================================================
@@ -119,6 +144,20 @@ _lib.fem_set_boundary_condition.restype = c_int32
 _lib.fem_solve.argtypes = [c_double, c_int32]
 _lib.fem_solve.restype = c_int32
 
+# Функции, добавленные в v1.10+. Если бинарник fem_core.so/.dll старый,
+# делаем заглушки, чтобы не падать при импорте.
+_lib.fem_set_thermal_capacity, _HAS_THERMAL_CAPACITY = _try_bind(
+    "fem_set_thermal_capacity", [c_double, c_double], c_int32)
+
+_lib.fem_solve_transient, _HAS_TRANSIENT = _try_bind(
+    "fem_solve_transient",
+    [c_double, c_double, c_double, c_int32,
+     POINTER(c_double), POINTER(c_double), c_double, c_int32], c_int32)
+
+_lib.fem_add_material_with_thermal, _HAS_ADD_MAT_THERMAL = _try_bind(
+    "fem_add_material_with_thermal",
+    [c_double, c_double, c_double, c_double], c_int32)
+
 _lib.fem_get_temperature.argtypes = [POINTER(c_double)]
 _lib.fem_get_temperature.restype = c_int32
 
@@ -150,6 +189,50 @@ _lib.fem_set_node_dirichlet.restype = c_int32
 _lib.fem_clear_node_dirichlet.argtypes = []
 _lib.fem_clear_node_dirichlet.restype = c_int32
 
+# Регионы материалов.
+_lib.fem_clear_materials.argtypes = []
+_lib.fem_clear_materials.restype = c_int32
+
+_lib.fem_add_material.argtypes = [c_double, c_double]
+_lib.fem_add_material.restype = c_int32
+
+_lib.fem_assign_material_in_box.argtypes = [c_int32] + [c_double] * 6
+_lib.fem_assign_material_in_box.restype = c_int32
+
+_lib.fem_assign_material_in_sphere.argtypes = [c_int32] + [c_double] * 4
+_lib.fem_assign_material_in_sphere.restype = c_int32
+
+_lib.fem_clear_material_assignments.argtypes = []
+_lib.fem_clear_material_assignments.restype = c_int32
+
+_lib.fem_get_material_ids.argtypes = [POINTER(c_int32)]
+_lib.fem_get_material_ids.restype = c_int32
+
+_lib.fem_get_material_count.argtypes = []
+_lib.fem_get_material_count.restype = c_int32
+
+# Анизотропная теплопроводность.
+_lib.fem_set_material_anisotropic, _HAS_ANISO = _try_bind(
+    "fem_set_material_anisotropic",
+    [c_double, c_double, c_double, c_double], c_int32)
+
+_lib.fem_add_material_anisotropic, _HAS_ADD_ANISO = _try_bind(
+    "fem_add_material_anisotropic",
+    [c_double, c_double, c_double, c_double], c_int32)
+
+# Прогресс-callback и прерывание.
+# C-сигнатура: int32_t cb(int32_t iteration, double residual)
+PROGRESS_CALLBACK = CFUNCTYPE(c_int32, c_int32, c_double)
+
+_lib.fem_set_progress_callback.argtypes = [PROGRESS_CALLBACK]
+_lib.fem_set_progress_callback.restype = c_int32
+
+_lib.fem_request_cancel.argtypes = []
+_lib.fem_request_cancel.restype = c_int32
+
+_lib.fem_clear_cancel.argtypes = []
+_lib.fem_clear_cancel.restype = c_int32
+
 # =============================================================================
 # Константы для типов ГУ и идентификаторов граней.
 # =============================================================================
@@ -157,6 +240,10 @@ BC_NONE = 0
 BC_DIRICHLET = 1
 BC_NEUMANN = 2
 BC_ROBIN = 3
+BC_RADIATION = 4   # Стефан-Больцман: −λ∂T/∂n = ε σ (T⁴ − T_ext⁴)
+
+# Постоянная Стефана-Больцмана.
+STEFAN_BOLTZMANN = 5.670374419e-8  # Вт/(м²·К⁴)
 
 FACE_X_MINUS = 0
 FACE_X_PLUS = 1
@@ -177,10 +264,6 @@ FACE_NAMES = {
 # Типы подобластей для объёмных источников.
 VOLSRC_BOX    = 0
 VOLSRC_SPHERE = 1
-
-
-class CoreError(RuntimeError):
-    """Ошибка, возвращённая C++ ядром."""
 
 
 class SolverInfo:
@@ -379,13 +462,177 @@ class CoreBridge:
         for i in range(idx.size):
             self.set_node_dirichlet(int(idx[i]), float(val[i]))
 
-    # --- Решение -------------------------------------------------------------
-    def solve(self, tol: float = 1e-8, max_iter: int = 5000) -> SolverInfo:
-        rc = _lib.fem_solve(float(tol), int(max_iter))
+    # --- Регионы материалов --------------------------------------------------
+    def clear_materials(self) -> None:
+        """Очистить все дополнительные материалы и снять назначения."""
+        rc = _lib.fem_clear_materials()
+        self._check(rc, "fem_clear_materials")
+
+    def add_material(self, lambda_: float, Q: float = 0.0) -> int:
+        """Добавить материал. Возвращает 1-based id, который потом передаётся
+        в assign_material_in_box / assign_material_in_sphere."""
+        if lambda_ <= 0.0:
+            raise CoreError("λ должно быть положительным")
+        rc = _lib.fem_add_material(float(lambda_), float(Q))
         if rc < 0:
-            raise CoreError(f"fem_solve вернул ошибку (код {rc})")
+            raise CoreError(f"fem_add_material вернул ошибку (код {rc})")
+        return int(rc)
+
+    def assign_material_in_box(self, material_id: int,
+                                x_min: float, x_max: float,
+                                y_min: float, y_max: float,
+                                z_min: float, z_max: float) -> int:
+        """Назначить материал тетраэдрам, центроид которых попадает в
+        прямоугольный параллелепипед. Возвращает число помеченных элементов."""
+        rc = _lib.fem_assign_material_in_box(
+            int(material_id),
+            float(x_min), float(x_max),
+            float(y_min), float(y_max),
+            float(z_min), float(z_max))
+        if rc < 0:
+            raise CoreError(f"fem_assign_material_in_box (код {rc})")
+        return int(rc)
+
+    def assign_material_in_sphere(self, material_id: int,
+                                   cx: float, cy: float, cz: float,
+                                   radius: float) -> int:
+        """Назначить материал тетраэдрам, центроид которых попадает в сферу."""
+        rc = _lib.fem_assign_material_in_sphere(
+            int(material_id),
+            float(cx), float(cy), float(cz), float(radius))
+        if rc < 0:
+            raise CoreError(f"fem_assign_material_in_sphere (код {rc})")
+        return int(rc)
+
+    def clear_material_assignments(self) -> None:
+        """Сбросить все material_id тетраэдров в 0 (глобальный материал)."""
+        rc = _lib.fem_clear_material_assignments()
+        self._check(rc, "fem_clear_material_assignments")
+
+    def get_material_ids(self) -> np.ndarray:
+        """Возвращает массив material_id длины n_elements."""
+        ne = self.n_elements
+        out = np.empty(ne, dtype=np.int32)
+        rc = _lib.fem_get_material_ids(out.ctypes.data_as(POINTER(c_int32)))
+        self._check(rc, "fem_get_material_ids")
+        return out
+
+    def get_material_count(self) -> int:
+        return int(_lib.fem_get_material_count())
+
+    def set_material_anisotropic(self, lambda_x: float, lambda_y: float,
+                                  lambda_z: float, Q: float = 0.0) -> None:
+        """Анизотропный глобальный материал. λ_x, λ_y, λ_z по 3 осям."""
+        rc = _lib.fem_set_material_anisotropic(
+            float(lambda_x), float(lambda_y), float(lambda_z), float(Q))
+        self._check(rc, "fem_set_material_anisotropic")
+
+    def add_material_anisotropic(self, lambda_x: float, lambda_y: float,
+                                  lambda_z: float, Q: float = 0.0) -> int:
+        """Анизотропный материал-регион. Возвращает 1-based id."""
+        rc = _lib.fem_add_material_anisotropic(
+            float(lambda_x), float(lambda_y), float(lambda_z), float(Q))
+        if rc < 0:
+            raise CoreError(f"fem_add_material_anisotropic вернул {rc}")
+        return int(rc)
+
+    # --- Решение -------------------------------------------------------------
+    def solve(self, tol: float = 1e-8, max_iter: int = 5000,
+              progress_callback=None) -> SolverInfo:
+        """Запустить CG-решатель.
+
+        progress_callback: вызываемая функция(iteration: int, residual: float) -> bool;
+            возврат True — продолжать, False — прервать. Если не задана,
+            расчёт идёт без callback. Прерывание из другого потока — через
+            request_cancel().
+
+        При прерывании возвращает SolverInfo с converged=False.
+        """
+        # Регистрируем callback (или сбрасываем).
+        cb_holder = None
+        if progress_callback is not None:
+            def _wrapped_cb(it: int, res: float) -> int:
+                try:
+                    keep_going = progress_callback(int(it), float(res))
+                    return 1 if keep_going else 0
+                except Exception:
+                    return 0  # прерываем при любой ошибке в callback
+            cb_holder = PROGRESS_CALLBACK(_wrapped_cb)
+            _lib.fem_set_progress_callback(cb_holder)
+        else:
+            _lib.fem_set_progress_callback(PROGRESS_CALLBACK(0))
+
+        try:
+            rc = _lib.fem_solve(float(tol), int(max_iter))
+            if rc < 0:
+                raise CoreError(f"fem_solve вернул ошибку (код {rc})")
+            self._solved = True
+            return self.solver_info()
+        finally:
+            _lib.fem_set_progress_callback(PROGRESS_CALLBACK(0))
+
+    def set_thermal_capacity(self, rho: float, cp: float) -> None:
+        """Установить плотность и теплоёмкость для нестационарной задачи.
+
+        rho — кг/м³, cp — Дж/(кг·К). Влияет на массовую матрицу и характерное
+        время t* = ρ·c_p·L²/λ.
+        """
+        rc = _lib.fem_set_thermal_capacity(float(rho), float(cp))
+        self._check(rc, "fem_set_thermal_capacity")
+
+    def add_material_with_thermal(self, lambda_: float, Q: float,
+                                    rho: float, cp: float) -> int:
+        """Добавить региональный материал со всеми теплофизическими свойствами."""
+        rc = _lib.fem_add_material_with_thermal(float(lambda_), float(Q),
+                                                  float(rho), float(cp))
+        if rc < 0:
+            raise CoreError("fem_add_material_with_thermal вернул ошибку")
+        return int(rc)
+
+    def solve_transient(self, t_end: float, dt: float, T_init: float = 0.0,
+                          n_save: int = 50,
+                          tol: float = 1e-8, max_iter: int = 5000):
+        """Нестационарный расчёт: серия снимков T(t) по неявной схеме Эйлера.
+
+        Параметры:
+            t_end   — финальное физическое время, с
+            dt      — шаг интегрирования, с
+            T_init  — начальная T, °C (одинаковая во всех узлах)
+            n_save  — число равноотстоящих снимков (включая t=0 и t=t_end)
+            tol, max_iter — параметры CG на каждом шаге
+
+        Возвращает (times, T_history):
+            times — массив shape (n_save,) моментов времени, с
+            T_history — массив shape (n_save, n_nodes) температур во всех узлах
+
+        Требует чтобы ρ и c_p были установлены через set_thermal_capacity().
+        Иначе используются дефолты ρ=1000, c_p=1000 (вода-подобное).
+        """
+        n = self.n_nodes
+        if n <= 0:
+            raise CoreError("Сетка не построена")
+        if n_save < 2:
+            n_save = 2
+        times = np.zeros(n_save, dtype=np.float64)
+        T_hist = np.zeros((n_save, n), dtype=np.float64)
+        rc = _lib.fem_solve_transient(
+            float(t_end), float(dt), float(T_init),
+            int(n_save),
+            times.ctypes.data_as(POINTER(c_double)),
+            T_hist.ctypes.data_as(POINTER(c_double)),
+            float(tol), int(max_iter))
+        if rc < 0:
+            raise CoreError(f"fem_solve_transient вернул ошибку (код {rc})")
         self._solved = True
-        return self.solver_info()
+        return times, T_hist
+
+    def request_cancel(self) -> None:
+        """Запросить прерывание текущего расчёта (можно вызывать из другого потока)."""
+        _lib.fem_request_cancel()
+
+    def clear_cancel(self) -> None:
+        """Сбросить флаг отмены."""
+        _lib.fem_clear_cancel()
 
     def solver_info(self) -> SolverInfo:
         iters = c_int32(0)

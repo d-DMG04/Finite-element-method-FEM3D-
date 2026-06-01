@@ -76,6 +76,22 @@ FEM_API std::int32_t fem_get_elements(std::int32_t* out_conn);
 // -----------------------------------------------------------------------------
 FEM_API std::int32_t fem_set_material(double lambda_val, double Q);
 
+// Установка плотности (кг/м³) и удельной теплоёмкости (Дж/(кг·К)) глобального
+// материала. Используются в нестационарной задаче (масс-матрица).
+FEM_API std::int32_t fem_set_thermal_capacity(double rho, double cp);
+
+// Нестационарная задача: серия снимков T(t).
+//   t_end, dt   — финальное время и шаг, сек
+//   T_init      — начальная T (одна на всю область)
+//   n_save      — число сохранённых снимков (>= 2)
+//   out_times   — буфер длины n_save
+//   out_T       — буфер длины n_save * n_nodes
+//   tol, max_iter — параметры CG на каждом шаге
+FEM_API std::int32_t fem_solve_transient(
+    double t_end, double dt, double T_init,
+    std::int32_t n_save, double* out_times, double* out_T,
+    double tol, std::int32_t max_iter);
+
 // -----------------------------------------------------------------------------
 // 7) Задание граничного условия на одной из 6 граней параллелепипеда.
 //    face_id: 0..5 (X-, X+, Y-, Y+, Z-, Z+);
@@ -163,6 +179,60 @@ FEM_API std::int32_t fem_add_volume_source(std::int32_t shape,
 // =============================================================================
 FEM_API std::int32_t fem_set_node_dirichlet(std::int32_t node_idx, double value);
 FEM_API std::int32_t fem_clear_node_dirichlet(void);
+
+// =============================================================================
+// Прогресс-callback и прерывание расчёта (раздел 3.3.x — отзывчивый GUI).
+//
+// fem_set_progress_callback(cb) — регистрирует Python-функцию, которая будет
+//     вызываться из CG-итерации каждые ~5 итераций. Сигнатура:
+//         int32_t cb(int32_t iteration, double residual)
+//     Возврат 1 — продолжать, 0 — прервать.
+//     Передать NULL — снять callback.
+//
+// fem_request_cancel() — флаг прерывания; устанавливается из другого потока,
+//     CG-цикл его читает и прерывается. Используется для кнопки Cancel в GUI.
+//     После прерывания fem_solve возвращает 2.
+//
+// fem_clear_cancel() — сбросить флаг (новый расчёт сделает это автоматически).
+// =============================================================================
+FEM_API std::int32_t fem_set_progress_callback(
+    std::int32_t (*cb)(std::int32_t, double));
+FEM_API std::int32_t fem_request_cancel(void);
+FEM_API std::int32_t fem_clear_cancel(void);
+
+// =============================================================================
+// Регионы материалов: задание разного λ, Q в разных частях детали.
+//
+// Базовый материал (id = 0) — это материал, заданный через fem_set_material().
+// Дополнительные материалы добавляются через fem_add_material(λ, Q),
+// который возвращает их id (1-based).
+// Затем материал назначается тетраэдрам, центроиды которых попадают
+// в заданный регион (bbox или сфера).
+// =============================================================================
+FEM_API std::int32_t fem_clear_materials(void);
+FEM_API std::int32_t fem_add_material(double lambda_val, double Q_val);
+FEM_API std::int32_t fem_assign_material_in_box(
+    std::int32_t material_id,
+    double x_min, double x_max,
+    double y_min, double y_max,
+    double z_min, double z_max);
+FEM_API std::int32_t fem_assign_material_in_sphere(
+    std::int32_t material_id,
+    double cx, double cy, double cz, double radius);
+FEM_API std::int32_t fem_clear_material_assignments(void);
+FEM_API std::int32_t fem_get_material_ids(std::int32_t* out_ids);
+FEM_API std::int32_t fem_get_material_count(void);
+
+// =============================================================================
+// Анизотропная теплопроводность: задание разных λ по осям X/Y/Z.
+//
+// fem_set_material_anisotropic — глобальный материал (вместо fem_set_material).
+// fem_add_material_anisotropic — региональный материал (вместо fem_add_material).
+// =============================================================================
+FEM_API std::int32_t fem_set_material_anisotropic(
+    double lambda_x, double lambda_y, double lambda_z, double Q_val);
+FEM_API std::int32_t fem_add_material_anisotropic(
+    double lambda_x, double lambda_y, double lambda_z, double Q_val);
 
 #ifdef __cplusplus
 } // extern "C"

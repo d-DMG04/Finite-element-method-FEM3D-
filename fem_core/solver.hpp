@@ -13,7 +13,9 @@
 
 #include "sparse.hpp"
 
+#include <atomic>
 #include <cstdint>
+#include <functional>
 #include <vector>
 
 namespace fem {
@@ -24,6 +26,15 @@ namespace fem {
 struct SolverOptions {
     double       tol_rel  = 1e-8;   // относительная норма невязки
     std::int32_t max_iter = 5000;   // верхний лимит итераций
+
+    // Callback прогресса: вызывается каждые N итераций (см. реализацию).
+    // Аргументы: текущая итерация, относительная невязка |r_k|/|F|.
+    // Возврат true — продолжать, false — прервать решение.
+    // Если callback не задан, проверка прерывания не выполняется.
+    std::function<bool(std::int32_t, double)> progress_callback;
+
+    // Период вызова callback (в итерациях). 0 → не вызывать.
+    std::int32_t progress_period = 10;
 };
 
 // -----------------------------------------------------------------------------
@@ -34,6 +45,7 @@ struct SolverResult {
     double       final_residual = 0.0;  // |r_k| / |F|
     double       solve_time_s  = 0.0;   // время решения в секундах
     std::int32_t converged     = 0;     // 1 — критерий достигнут, 0 — нет
+    std::int32_t cancelled     = 0;     // 1 — прервано через callback
 };
 
 // -----------------------------------------------------------------------------

@@ -322,7 +322,214 @@ class TestLoadMesh:
 
 
 # =============================================================================
-# Тесты переопределения Дирихле по узлам (используется в T3).
+# Тесты сложных геометрий (fem3d.shapes).
+# =============================================================================
+
+class TestShapes:
+
+    def _check_mesh_is_valid(self, nodes, tets, bnd_nodes, bnd_face_ids):
+        """Базовая валидация: размеры массивов, типы, индексы в диапазоне."""
+        assert nodes.shape[1] == 3
+        assert tets.shape[1] == 4
+        assert bnd_nodes.shape[1] == 3
+        assert bnd_face_ids.shape[0] == bnd_nodes.shape[0]
+        assert tets.max() < nodes.shape[0]
+        assert bnd_nodes.max() < nodes.shape[0]
+        assert tets.dtype == np.int32
+        assert bnd_nodes.dtype == np.int32
+
+    def test_cylinder_generates_and_solves(self):
+        from fem3d.shapes import make_cylinder
+        nodes, tets, bnd, bnd_ids = make_cylinder(0.05, 0.10, 4, 16, 8)
+        self._check_mesh_is_valid(nodes, tets, bnd, bnd_ids)
+        with CoreBridge() as br:
+            br.load_mesh(nodes, tets, bnd, bnd_ids)
+            br.set_material(401.0, 0.0)
+            br.set_bc(0, BC_DIRICHLET, T0=50.0)
+            info = br.solve()
+            assert info.converged
+            T = br.get_temperature()
+            # При Дирихле = 50 на всей поверхности — решение T = 50.
+            assert abs(T.mean() - 50.0) < 1e-3
+
+    def test_torus_generates_and_solves(self):
+        from fem3d.shapes import make_torus
+        nodes, tets, bnd, bnd_ids = make_torus(0.05, 0.015, 24, 12, 2)
+        self._check_mesh_is_valid(nodes, tets, bnd, bnd_ids)
+        # Точечный источник создаёт максимум именно в нём.
+        idx = int(np.argmin(np.linalg.norm(
+            nodes - np.array([0.065, 0, 0]), axis=1)))
+        with CoreBridge() as br:
+            br.load_mesh(nodes, tets, bnd, bnd_ids)
+            br.set_material(401.0, 0.0)
+            br.set_bc(0, BC_ROBIN, alpha=20.0, T_inf=20.0)
+            br.add_point_source(idx, 30.0)
+            info = br.solve()
+            assert info.converged
+            T = br.get_temperature()
+            idx_max = int(np.argmax(T))
+            assert idx_max == idx, \
+                f"максимум должен быть в узле {idx}, оказался в {idx_max}"
+
+    def test_pyramid_generates_and_solves(self):
+        from fem3d.shapes import make_pyramid
+        nodes, tets, bnd, bnd_ids = make_pyramid(0.10, 0.08, 8, 6)
+        self._check_mesh_is_valid(nodes, tets, bnd, bnd_ids)
+        with CoreBridge() as br:
+            br.load_mesh(nodes, tets, bnd, bnd_ids)
+            br.set_material(237.0, 0.0)
+            br.set_bc(0, BC_DIRICHLET, T0=100.0)
+            info = br.solve()
+            assert info.converged
+
+    def test_plate_with_hole(self):
+        from fem3d.shapes import make_plate_with_hole
+        nodes, tets, bnd, bnd_ids = make_plate_with_hole(
+            0.20, 0.10, 0.005, 0.06, 0.04, 0.04, 0.02, 20, 10, 2)
+        self._check_mesh_is_valid(nodes, tets, bnd, bnd_ids)
+        # В районе отверстия не должно быть тетраэдров.
+        hole_center = np.array([0.06 + 0.02, 0.04 + 0.01, 0.0025])
+        # Найдём ближайший узел к центру отверстия и убедимся, что он
+        # находится на краю отверстия, а не в его середине.
+        d = np.linalg.norm(nodes - hole_center, axis=1)
+        idx = int(np.argmin(d))
+        # Минимальное расстояние от центра отверстия до любого узла должно
+        # быть около половины короткой стороны выреза (т.е. ~0.01 м).
+        assert d[idx] >= 0.009, \
+            f"узел оказался слишком близко к центру выреза: d={d[idx]:.4f}"
+
+    def test_l_beam(self):
+        from fem3d.shapes import make_l_beam
+        nodes, tets, bnd, bnd_ids = make_l_beam(
+            0.10, 0.02, 0.05, 10, 4, 6)
+        self._check_mesh_is_valid(nodes, tets, bnd, bnd_ids)
+        # Внутренний угол должен быть пустым: точка (0.05, depth/2, 0.05)
+        # лежит в «вырезе» L-формы.
+        empty_point = np.array([0.05, 0.025, 0.05])
+        d = np.linalg.norm(nodes - empty_point, axis=1)
+        assert d.min() > 0.01, \
+            "L-балка должна иметь пустой внутренний угол"
+
+
+# =============================================================================
+# Тесты шаблонов нагрева (фабрики возвращают валидные dict).
+# =============================================================================
+
+class TestHeatingTemplates:
+
+    def test_all_templates_listed(self):
+        from fem3d import HEATING_TEMPLATES
+        # Минимум 10 шаблонов.
+        assert len(HEATING_TEMPLATES) >= 10
+
+    def test_each_template_returns_six_faces(self):
+        from fem3d import HEATING_TEMPLATES
+        for label, factory in HEATING_TEMPLATES:
+            bcs = factory()
+            assert isinstance(bcs, dict), f"шаблон {label} вернул не dict"
+            assert set(bcs.keys()) == set(range(6)), \
+                f"шаблон {label} не покрывает все 6 граней"
+
+    def test_cpu_cooler_template_solves(self):
+        """Шаблон «процессорный кулер» даёт корректную задачу."""
+        from fem3d import template_cpu_cooler
+        problem = Problem(
+            geometry=BoxGeometry(Lx=0.05, Ly=0.05, Lz=0.02, nx=8, ny=8, nz=4),
+            lambda_=401.0,  # медь
+            bcs=template_cpu_cooler(),
+        )
+        with CoreBridge() as br:
+            problem.build_mesh_in_core(br)
+            info = problem.solve(br)
+            assert info.converged
+        Tmin, Tmax = problem.temperature_range()
+        # Снизу 90 °C, окружающая среда 25 — решение в диапазоне.
+        assert 25.0 < Tmin <= 90.5
+        assert 25.0 < Tmax <= 90.5
+
+    def test_water_cooled_template_solves(self):
+        """Сильная конвекция должна охлаждать тело с объёмным источником."""
+        from fem3d import template_water_cooled
+        problem = Problem(
+            geometry=BoxGeometry(Lx=0.05, Ly=0.05, Lz=0.05, nx=8, ny=8, nz=8),
+            lambda_=237.0,
+            Q=1.0e6,  # 1 МВт/м³
+            bcs=template_water_cooled(),
+        )
+        with CoreBridge() as br:
+            problem.build_mesh_in_core(br)
+            info = problem.solve(br)
+            assert info.converged
+        Tmin, Tmax = problem.temperature_range()
+        # Сильная конвекция (α=500) удерживает температуру близко к 15 °C.
+        assert Tmax < 60.0
+
+# =============================================================================
+# Тесты регионов материалов (раздел 3.3.x ПЗ — разные λ в разных частях).
+# =============================================================================
+
+class TestMaterialRegions:
+
+    def test_two_materials_serial(self):
+        """Куб с медью (x<0.05) и стеклом (x>0.05), Дирихле T=100 на x=0,
+        T=0 на x=Lx. Аналитика: T на интерфейсе ≈ 99.75 °C."""
+        from fem3d import (MaterialRegion, REGION_BOX, Problem, BoxGeometry,
+                           BoundaryCondition, BC_DIRICHLET, BC_NEUMANN,
+                           FACE_X_MINUS, FACE_X_PLUS,
+                           FACE_Y_MINUS, FACE_Y_PLUS,
+                           FACE_Z_MINUS, FACE_Z_PLUS)
+        problem = Problem(
+            geometry=BoxGeometry(Lx=0.10, Ly=0.05, Lz=0.05,
+                                 nx=20, ny=6, nz=6),
+            lambda_=237.0,
+            bcs={
+                FACE_X_MINUS: BoundaryCondition(type=BC_DIRICHLET, T0=100.0),
+                FACE_X_PLUS:  BoundaryCondition(type=BC_DIRICHLET, T0=0.0),
+                FACE_Y_MINUS: BoundaryCondition(type=BC_NEUMANN),
+                FACE_Y_PLUS:  BoundaryCondition(type=BC_NEUMANN),
+                FACE_Z_MINUS: BoundaryCondition(type=BC_NEUMANN),
+                FACE_Z_PLUS:  BoundaryCondition(type=BC_NEUMANN),
+            },
+        )
+        problem.material_regions.append(MaterialRegion(
+            name="Cu", lambda_=400.0,
+            shape=REGION_BOX, params=(0.0, 0.05, 0.0, 0.05, 0.0, 0.05),
+        ))
+        problem.material_regions.append(MaterialRegion(
+            name="Glass", lambda_=1.0,
+            shape=REGION_BOX, params=(0.05, 0.10, 0.0, 0.05, 0.0, 0.05),
+        ))
+        with CoreBridge() as br:
+            problem.build_mesh_in_core(br)
+            info = problem.solve(br)
+        assert info.converged
+        # T на узлах интерфейса x≈0.05.
+        mask = np.abs(problem.nodes[:, 0] - 0.05) < 1e-4
+        assert np.any(mask), "узлы на интерфейсе должны существовать"
+        T_interface = problem.T[mask].mean()
+        # Теория: T = 100 - 100 * R_Cu / (R_Cu + R_Glass) ≈ 99.75
+        assert 99.5 < T_interface < 99.9, \
+            f"Температура на интерфейсе {T_interface} вне диапазона"
+
+    def test_clear_material_assignments(self):
+        """clear_material_assignments возвращает к глобальному материалу."""
+        with CoreBridge() as br:
+            br.generate_box(0, 0.1, 0, 0.1, 0, 0.1, 5, 5, 5)
+            br.set_material(237.0, 0.0)
+            mat_id = br.add_material(1.0, 0.0)
+            count = br.assign_material_in_box(mat_id,
+                                              0.0, 0.05, 0.0, 1.0, 0.0, 1.0)
+            assert count > 0
+            ids = br.get_material_ids()
+            assert (ids == mat_id).sum() == count
+
+            br.clear_material_assignments()
+            ids = br.get_material_ids()
+            assert (ids == 0).all()
+
+
+# =============================================================================
+# Тесты поузельных значений Дирихле (раздел 3.4.3 ПЗ).
 # =============================================================================
 
 class TestNodeDirichlet:

@@ -41,10 +41,14 @@ struct Node {
 };
 
 // -----------------------------------------------------------------------------
-// Тетраэдральный элемент P1 — четыре глобальных номера узлов.
+// Тетраэдральный элемент P1 — четыре глобальных номера узлов + ID материала.
+// material_id = 0 означает «глобальный материал» (заданный через
+// fem_set_material). Любое значение >0 ссылается на пользовательский
+// материал в spec.materials[].
 // -----------------------------------------------------------------------------
 struct Tetrahedron {
     std::array<std::int32_t, 4> nodes; // глобальные индексы вершин
+    std::int32_t material_id = 0;      // ID материала (0 = глобальный)
 };
 
 // -----------------------------------------------------------------------------
@@ -75,6 +79,21 @@ public:
               const std::int32_t* boundary_nodes,
               const std::int32_t* boundary_face_ids,
               std::int32_t n_boundary_faces);
+
+    // --- Регионы материалов (раздел 3.3.x ПЗ) ---------------------------------
+    // Назначить ID материала всем тетраэдрам, центроид которых попадает в
+    // заданный bbox/сферу. Возвращает число помеченных тетраэдров.
+    std::int32_t assign_material_in_box(std::int32_t material_id,
+                                        double x_min, double x_max,
+                                        double y_min, double y_max,
+                                        double z_min, double z_max);
+    std::int32_t assign_material_in_sphere(std::int32_t material_id,
+                                            double cx, double cy, double cz,
+                                            double radius);
+    void clear_material_assignments();
+
+    // Прямой доступ к массиву material_id (Python считывает его через C-API).
+    void copy_material_ids_to(std::int32_t* out) const;
 
     // --- Геометрические вычисления ------------------------------------------
     // Объём элемента e (формула 2.17).

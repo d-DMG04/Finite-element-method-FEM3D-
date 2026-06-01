@@ -71,35 +71,65 @@ void assemble(const Mesh& mesh, const ProblemSpec& spec,
     std::fill(K.values().begin(), K.values().end(), 0.0);
     F.assign(static_cast<std::size_t>(N), 0.0);
 
-    const double lambda = spec.lambda;
-    const double Q      = spec.Q;
+    const double lambda_global = spec.lambda;
+    const double Q_global      = spec.Q;
+    const std::int32_t n_materials = static_cast<std::int32_t>(spec.materials.size());
 
     // -------------------------------------------------------------------------
     // Объёмные вклады: цикл по элементам.
     // Формула локальной K^e (1.21):
-    //     K^e_{ij} = lambda / (36 * V_e) * (b_i b_j + c_i c_j + d_i d_j)
-    // Локальный вектор от Q (1.23):  F^e_i = Q V_e / 4
+    //     K^e_{ij} = lambda_e / (36 * V_e) * (b_i b_j + c_i c_j + d_i d_j)
+    // Локальный вектор от Q (1.23):  F^e_i = Q_e V_e / 4
+    //
+    // lambda_e и Q_e зависят от material_id тетраэдра (см. ProblemSpec).
     // -------------------------------------------------------------------------
     #pragma omp parallel for schedule(static)
     for (std::int32_t e = 0; e < Ne; ++e) {
         std::array<double, 4> bb, cc, dd;
         const double V6 = mesh.element_gradients(e, bb, cc, dd);
         const double Ve = V6 / 6.0;
-        if (Ve <= 0.0) continue;
+        // Отбраковка вырожденных тетраэдров: V <= 0 либо очень малый объём
+        // (даёт огромные значения в K, портит обусловленность).
+        if (Ve <= 1e-20) continue;
 
-        // Локальная матрица 4x4.
+        const auto& tet = mesh.elements()[static_cast<std::size_t>(e)];
+
+        // Свойства материала для этого тетраэдра.
+        // Поддержка изотропного и анизотропного случая.
+        double lx, ly, lz;
+        double Q_e = Q_global;
+        const std::int32_t mid = tet.material_id;
+        if (mid > 0 && mid <= n_materials) {
+            const auto& mat = spec.materials[static_cast<std::size_t>(mid - 1)];
+            if (mat.is_anisotropic) {
+                lx = mat.lambda_x; ly = mat.lambda_y; lz = mat.lambda_z;
+            } else {
+                lx = ly = lz = mat.lambda;
+            }
+            Q_e = mat.Q;
+        } else {
+            if (spec.is_anisotropic) {
+                lx = spec.lambda_x; ly = spec.lambda_y; lz = spec.lambda_z;
+            } else {
+                lx = ly = lz = lambda_global;
+            }
+        }
+
+        // Локальная матрица 4x4 (анизотропная формула):
+        //   K^e_{ij} = (1/(36V)) · (λ_x b_i b_j + λ_y c_i c_j + λ_z d_i d_j)
         double Ke[4][4];
-        const double coef = lambda / (36.0 * Ve);
+        const double invV36 = 1.0 / (36.0 * Ve);
         for (int i = 0; i < 4; ++i) {
             for (int j = 0; j < 4; ++j) {
-                Ke[i][j] = coef * (bb[i] * bb[j] + cc[i] * cc[j] + dd[i] * dd[j]);
+                Ke[i][j] = invV36 * (lx * bb[i] * bb[j]
+                                     + ly * cc[i] * cc[j]
+                                     + lz * dd[i] * dd[j]);
             }
         }
 
         // Локальный вектор от объёмного источника.
-        const double Fe_loc = (Q * Ve) / 4.0;
+        const double Fe_loc = (Q_e * Ve) / 4.0;
 
-        const auto& tet = mesh.elements()[static_cast<std::size_t>(e)];
         for (int i = 0; i < 4; ++i) {
             const std::int32_t gi = tet.nodes[i];
             #pragma omp atomic
@@ -205,6 +235,42 @@ void assemble(const Mesh& mesh, const ProblemSpec& spec,
                 #pragma omp atomic
                 F[static_cast<std::size_t>(gi)] += contrib;
             }
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Сборка lumped (диагональной) массовой матрицы M.
+// Для P1 тетра: M_ii^e = ρ·c_p · V_e / 4 для каждого узла тетраэдра.
+// -----------------------------------------------------------------------------
+void assemble_lumped_mass(const Mesh& mesh, const ProblemSpec& spec,
+                           std::vector<double>& m_diag) {
+    const std::int32_t N = mesh.n_nodes();
+    const std::int32_t Ne = mesh.n_elements();
+    m_diag.assign(static_cast<std::size_t>(N), 0.0);
+
+    const std::int32_t n_materials = static_cast<std::int32_t>(spec.materials.size());
+    const double rho_global = (spec.rho > 0) ? spec.rho : 1000.0;
+    const double cp_global  = (spec.cp  > 0) ? spec.cp  : 1000.0;
+
+    for (std::int32_t e = 0; e < Ne; ++e) {
+        std::array<double, 4> bb, cc, dd;
+        const double V6 = mesh.element_gradients(e, bb, cc, dd);
+        const double Ve = V6 / 6.0;
+        if (Ve <= 1e-20) continue;
+        const auto& tet = mesh.elements()[static_cast<std::size_t>(e)];
+
+        double rho_e = rho_global;
+        double cp_e  = cp_global;
+        const std::int32_t mid = tet.material_id;
+        if (mid > 0 && mid <= n_materials) {
+            const auto& m = spec.materials[static_cast<std::size_t>(mid - 1)];
+            if (m.rho > 0) rho_e = m.rho;
+            if (m.cp  > 0) cp_e  = m.cp;
+        }
+        const double m_node = rho_e * cp_e * Ve / 4.0;
+        for (int a = 0; a < 4; ++a) {
+            m_diag[static_cast<std::size_t>(tet.nodes[a])] += m_node;
         }
     }
 }

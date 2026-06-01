@@ -292,4 +292,64 @@ double Mesh::face_area(std::int32_t face_idx) const {
     return 0.5 * std::sqrt(cx * cx + cy * cy + cz * cz);
 }
 
+// -----------------------------------------------------------------------------
+// Регионы материалов.
+// -----------------------------------------------------------------------------
+
+std::int32_t Mesh::assign_material_in_box(std::int32_t material_id,
+                                          double x_min, double x_max,
+                                          double y_min, double y_max,
+                                          double z_min, double z_max) {
+    std::int32_t count = 0;
+    for (auto& tet : elements_) {
+        // Центроид элемента.
+        double cx = 0.0, cy = 0.0, cz = 0.0;
+        for (int i = 0; i < 4; ++i) {
+            const auto& n = nodes_[static_cast<std::size_t>(tet.nodes[i])];
+            cx += n.x; cy += n.y; cz += n.z;
+        }
+        cx *= 0.25; cy *= 0.25; cz *= 0.25;
+        if (cx >= x_min && cx <= x_max
+            && cy >= y_min && cy <= y_max
+            && cz >= z_min && cz <= z_max) {
+            tet.material_id = material_id;
+            ++count;
+        }
+    }
+    return count;
+}
+
+std::int32_t Mesh::assign_material_in_sphere(std::int32_t material_id,
+                                              double cx0, double cy0, double cz0,
+                                              double radius) {
+    const double r2 = radius * radius;
+    std::int32_t count = 0;
+    for (auto& tet : elements_) {
+        double cx = 0.0, cy = 0.0, cz = 0.0;
+        for (int i = 0; i < 4; ++i) {
+            const auto& n = nodes_[static_cast<std::size_t>(tet.nodes[i])];
+            cx += n.x; cy += n.y; cz += n.z;
+        }
+        cx *= 0.25; cy *= 0.25; cz *= 0.25;
+        const double dx = cx - cx0, dy = cy - cy0, dz = cz - cz0;
+        if (dx * dx + dy * dy + dz * dz <= r2) {
+            tet.material_id = material_id;
+            ++count;
+        }
+    }
+    return count;
+}
+
+void Mesh::clear_material_assignments() {
+    for (auto& tet : elements_) {
+        tet.material_id = 0;
+    }
+}
+
+void Mesh::copy_material_ids_to(std::int32_t* out) const {
+    for (std::size_t i = 0; i < elements_.size(); ++i) {
+        out[i] = elements_[i].material_id;
+    }
+}
+
 } // namespace fem

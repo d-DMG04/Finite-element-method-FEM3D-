@@ -19,10 +19,14 @@
 
 namespace fem {
 
+// Forward declaration ProblemSpec — определена в assembly.hpp.
+struct ProblemSpec;
+
 // -----------------------------------------------------------------------------
 // Поток на каждом элементе: вектор (qx, qy, qz) длины 3 * Ne.
+// lambda берётся из spec в соответствии с material_id каждого тетраэдра.
 // -----------------------------------------------------------------------------
-void compute_element_fluxes(const Mesh& mesh, double lambda,
+void compute_element_fluxes(const Mesh& mesh, const ProblemSpec& spec,
                             const std::vector<double>& T,
                             std::vector<double>& flux_per_element);
 

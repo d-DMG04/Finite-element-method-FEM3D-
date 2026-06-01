@@ -13,17 +13,21 @@
 // =============================================================================
 
 #include "flux.hpp"
+#include "assembly.hpp"  // нужен ProblemSpec для регионов материалов
 
 #include <array>
 #include <cstddef>
 
 namespace fem {
 
-void compute_element_fluxes(const Mesh& mesh, double lambda,
+void compute_element_fluxes(const Mesh& mesh, const ProblemSpec& spec,
                             const std::vector<double>& T,
                             std::vector<double>& flux_per_element) {
     const std::int32_t Ne = mesh.n_elements();
     flux_per_element.assign(static_cast<std::size_t>(3 * Ne), 0.0);
+
+    const double lambda_global = spec.lambda;
+    const std::int32_t n_materials = static_cast<std::int32_t>(spec.materials.size());
 
     #pragma omp parallel for schedule(static)
     for (std::int32_t e = 0; e < Ne; ++e) {
@@ -32,6 +36,25 @@ void compute_element_fluxes(const Mesh& mesh, double lambda,
         if (V6 == 0.0) continue;
 
         const auto& tet = mesh.elements()[static_cast<std::size_t>(e)];
+
+        // Выбираем λ по material_id (с поддержкой анизотропии).
+        double lx, ly, lz;
+        const std::int32_t mid = tet.material_id;
+        if (mid > 0 && mid <= n_materials) {
+            const auto& mat = spec.materials[static_cast<std::size_t>(mid - 1)];
+            if (mat.is_anisotropic) {
+                lx = mat.lambda_x; ly = mat.lambda_y; lz = mat.lambda_z;
+            } else {
+                lx = ly = lz = mat.lambda;
+            }
+        } else {
+            if (spec.is_anisotropic) {
+                lx = spec.lambda_x; ly = spec.lambda_y; lz = spec.lambda_z;
+            } else {
+                lx = ly = lz = lambda_global;
+            }
+        }
+
         double gx = 0.0, gy = 0.0, gz = 0.0;
         for (int i = 0; i < 4; ++i) {
             const double Ti = T[static_cast<std::size_t>(tet.nodes[i])];
@@ -40,9 +63,10 @@ void compute_element_fluxes(const Mesh& mesh, double lambda,
             gz += Ti * dd[i];
         }
         const double inv6V = 1.0 / V6;
-        flux_per_element[static_cast<std::size_t>(3 * e + 0)] = -lambda * gx * inv6V;
-        flux_per_element[static_cast<std::size_t>(3 * e + 1)] = -lambda * gy * inv6V;
-        flux_per_element[static_cast<std::size_t>(3 * e + 2)] = -lambda * gz * inv6V;
+        // Анизотропный закон Фурье: q_i = -λ_i · ∂T/∂x_i
+        flux_per_element[static_cast<std::size_t>(3 * e + 0)] = -lx * gx * inv6V;
+        flux_per_element[static_cast<std::size_t>(3 * e + 1)] = -ly * gy * inv6V;
+        flux_per_element[static_cast<std::size_t>(3 * e + 2)] = -lz * gz * inv6V;
     }
 }
 

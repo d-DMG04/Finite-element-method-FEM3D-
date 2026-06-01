@@ -117,6 +117,7 @@ std::int32_t solve_cg(const CSRMatrix& K,
         result.iterations    = 0;
         result.final_residual = 0.0;
         result.converged     = 1;
+        result.cancelled     = 0;
         result.solve_time_s  = std::chrono::duration<double>(clock::now() - t0).count();
         return 1;
     }
@@ -141,6 +142,7 @@ std::int32_t solve_cg(const CSRMatrix& K,
 
     std::int32_t k = 0;
     std::int32_t converged = (rel < opts.tol_rel) ? 1 : 0;
+    std::int32_t cancelled = 0;
 
     for (k = 0; k < opts.max_iter && !converged; ++k) {
         K.multiply(p, Kp);
@@ -160,6 +162,16 @@ std::int32_t solve_cg(const CSRMatrix& K,
             break;
         }
 
+        // Callback прогресса: вызов через GIL может быть дорогим, поэтому
+        // отбиваем каждые progress_period итераций.
+        if (opts.progress_callback && opts.progress_period > 0
+            && ((k + 1) % opts.progress_period == 0)) {
+            if (!opts.progress_callback(k + 1, rel)) {
+                cancelled = 1;
+                break;
+            }
+        }
+
         apply_jacobi(diag, r, z);
         const double rz_new = dot(r, z);
         const double beta = rz_new / rz_old;
@@ -169,18 +181,16 @@ std::int32_t solve_cg(const CSRMatrix& K,
 
     // Если вышли по max_iter — converged остаётся 0, но T содержит последнее
     // приближение. Это согласуется с поведением, описанным в разделе 3.1.4.
-    result.iterations    = (k > 0) ? k + 1 : (converged ? 0 : 0);
-    // Уточняем: если сошлись на k-й итерации — выполнено k+1 итераций;
-    // если сходимость уже на старте (rel < tol) — 0.
     if (converged && k == 0 && rel < opts.tol_rel) {
         result.iterations = 0;
     } else if (converged) {
         result.iterations = k + 1;
     } else {
-        result.iterations = opts.max_iter;
+        result.iterations = k;  // прервано или max_iter
     }
     result.final_residual = rel;
     result.converged      = converged;
+    result.cancelled      = cancelled;
     result.solve_time_s   = std::chrono::duration<double>(clock::now() - t0).count();
     return converged;
 }
