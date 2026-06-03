@@ -1,8 +1,8 @@
-# Install script for directory: C:/Users/Scrollend/Downloads/fem_heat3d_v1.2/fem_heat3d/fem_core
+# Install script for directory: C:/Users/Scrollend/Downloads/fem_heat3d_v1.17/fem_heat3d/fem_core
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
-  set(CMAKE_INSTALL_PREFIX "C:/Program Files/fem_core")
+  set(CMAKE_INSTALL_PREFIX "C:/Program Files (x86)/fem_core")
 endif()
 string(REGEX REPLACE "/$" "" CMAKE_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX}")
 
@@ -34,20 +34,20 @@ endif()
 
 if(CMAKE_INSTALL_COMPONENT STREQUAL "Unspecified" OR NOT CMAKE_INSTALL_COMPONENT)
   if(CMAKE_INSTALL_CONFIG_NAME MATCHES "^([Dd][Ee][Bb][Uu][Gg])$")
-    file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/bin" TYPE SHARED_LIBRARY FILES "C:/Users/Scrollend/Downloads/fem_heat3d_v1.2/fem_heat3d/fem_core/build/fem_core.dll")
+    file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/bin" TYPE SHARED_LIBRARY FILES "C:/Users/Scrollend/Downloads/fem_heat3d_v1.17/fem_heat3d/fem_core/build/fem_core.dll")
   elseif(CMAKE_INSTALL_CONFIG_NAME MATCHES "^([Rr][Ee][Ll][Ee][Aa][Ss][Ee])$")
-    file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/bin" TYPE SHARED_LIBRARY FILES "C:/Users/Scrollend/Downloads/fem_heat3d_v1.2/fem_heat3d/fem_core/build/fem_core.dll")
+    file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/bin" TYPE SHARED_LIBRARY FILES "C:/Users/Scrollend/Downloads/fem_heat3d_v1.17/fem_heat3d/fem_core/build/fem_core.dll")
   elseif(CMAKE_INSTALL_CONFIG_NAME MATCHES "^([Mm][Ii][Nn][Ss][Ii][Zz][Ee][Rr][Ee][Ll])$")
-    file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/bin" TYPE SHARED_LIBRARY FILES "C:/Users/Scrollend/Downloads/fem_heat3d_v1.2/fem_heat3d/fem_core/build/MinSizeRel/fem_core.dll")
+    file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/bin" TYPE SHARED_LIBRARY FILES "C:/Users/Scrollend/Downloads/fem_heat3d_v1.17/fem_heat3d/fem_core/build/MinSizeRel/fem_core.dll")
   elseif(CMAKE_INSTALL_CONFIG_NAME MATCHES "^([Rr][Ee][Ll][Ww][Ii][Tt][Hh][Dd][Ee][Bb][Ii][Nn][Ff][Oo])$")
-    file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/bin" TYPE SHARED_LIBRARY FILES "C:/Users/Scrollend/Downloads/fem_heat3d_v1.2/fem_heat3d/fem_core/build/RelWithDebInfo/fem_core.dll")
+    file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/bin" TYPE SHARED_LIBRARY FILES "C:/Users/Scrollend/Downloads/fem_heat3d_v1.17/fem_heat3d/fem_core/build/RelWithDebInfo/fem_core.dll")
   endif()
 endif()
 
 string(REPLACE ";" "\n" CMAKE_INSTALL_MANIFEST_CONTENT
        "${CMAKE_INSTALL_MANIFEST_FILES}")
 if(CMAKE_INSTALL_LOCAL_ONLY)
-  file(WRITE "C:/Users/Scrollend/Downloads/fem_heat3d_v1.2/fem_heat3d/fem_core/build/install_local_manifest.txt"
+  file(WRITE "C:/Users/Scrollend/Downloads/fem_heat3d_v1.17/fem_heat3d/fem_core/build/install_local_manifest.txt"
      "${CMAKE_INSTALL_MANIFEST_CONTENT}")
 endif()
 if(CMAKE_INSTALL_COMPONENT)
@@ -63,6 +63,6 @@ else()
 endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
-  file(WRITE "C:/Users/Scrollend/Downloads/fem_heat3d_v1.2/fem_heat3d/fem_core/build/${CMAKE_INSTALL_MANIFEST}"
+  file(WRITE "C:/Users/Scrollend/Downloads/fem_heat3d_v1.17/fem_heat3d/fem_core/build/${CMAKE_INSTALL_MANIFEST}"
      "${CMAKE_INSTALL_MANIFEST_CONTENT}")
 endif()

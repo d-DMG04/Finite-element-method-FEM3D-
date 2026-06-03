@@ -45,6 +45,15 @@ from .project import (
     PROJECT_EXTENSION, PROJECT_FORMAT_VERSION,
     save_project, load_project, project_info,
 )
+from .convection import (
+    FluidProperties, ForcedConvectionResult,
+    SHAPE_PLATE, SHAPE_CYLINDER, SHAPE_SPHERE, SHAPE_CUBE, SHAPE_NAMES,
+    air_properties, reynolds, nusselt_forced, nusselt_natural_vertical_plate,
+    rayleigh, heat_transfer_coefficient,
+    surface_areas, frontal_area, faces_exposed_to_flow, parse_direction,
+    characteristic_length, analyze_forced_convection,
+    apply_forced_convection_bc,
+)
 
 __version__ = "1.1.0"
 
@@ -78,4 +87,12 @@ __all__ = [
     # project
     "PROJECT_EXTENSION", "PROJECT_FORMAT_VERSION",
     "save_project", "load_project", "project_info",
+    # convection (вынужденная конвекция при обтекании)
+    "FluidProperties", "ForcedConvectionResult",
+    "SHAPE_PLATE", "SHAPE_CYLINDER", "SHAPE_SPHERE", "SHAPE_CUBE", "SHAPE_NAMES",
+    "air_properties", "reynolds", "nusselt_forced",
+    "nusselt_natural_vertical_plate", "rayleigh", "heat_transfer_coefficient",
+    "surface_areas", "frontal_area", "faces_exposed_to_flow", "parse_direction",
+    "characteristic_length", "analyze_forced_convection",
+    "apply_forced_convection_bc",
 ]

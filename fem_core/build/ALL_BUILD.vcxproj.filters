@@ -1,7 +1,7 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <CustomBuild Include="C:\Users\Scrollend\Downloads\fem_heat3d_v1.2\fem_heat3d\fem_core\CMakeLists.txt" />
+    <CustomBuild Include="C:\Users\Scrollend\Downloads\fem_heat3d_v1.17\fem_heat3d\fem_core\CMakeLists.txt" />
   </ItemGroup>
   <ItemGroup>
   </ItemGroup>

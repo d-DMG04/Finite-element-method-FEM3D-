@@ -68,6 +68,7 @@ from gui import (AppSettings, BoundaryConditionsDialog, CalculationRecord,
                  MaterialDialog, MaterialRegionsDialog,
                  PlotsView, PointSourceDialog, SettingsDialog, SolverWorker,
                  TransientParamsDialog, WhatIfView,
+                 ForcedConvectionDialog,
                  VolumeSourceDialog, build_palette, build_stylesheet,
                  create_view, current_theme, set_theme)
 
@@ -562,6 +563,15 @@ class MainWindow(QMainWindow):
         mat_menu.addAction(a)
         a = QAction("&Регионы материалов...", self); a.triggered.connect(self._on_edit_regions)
         mat_menu.addAction(a)
+
+        # === Обдув / конвекция ==============================================
+        conv_menu = m.addMenu("&Обдув")
+        a = QAction("Конвекция при обтекании потоком...", self)
+        a.triggered.connect(self._on_forced_convection)
+        conv_menu.addAction(a)
+        a = QAction("Площадь поверхности / число Нуссельта", self)
+        a.triggered.connect(self._on_surface_and_nusselt)
+        conv_menu.addAction(a)
 
         # === Настройки =======================================================
         settings_menu = m.addMenu("&Настройки")
@@ -1436,7 +1446,14 @@ class MainWindow(QMainWindow):
                 f"T={T_hist.min():.2f}..{T_hist.max():.2f} °C")
             # Включаем плеер.
             self._build_or_show_transient_player()
-            self.viz.set_temperature(T_hist[-1])
+            # ВАЖНО: показываем НАЧАЛЬНЫЙ кадр (t=0, нагретое состояние),
+            # а не последний (остывшее ≈ среда). Иначе кажется, что тело
+            # «не нагрето и не остывает» — на самом деле просто сразу
+            # показывался конечный остывший кадр.
+            self.viz.set_temperature(T_hist[0])
+            # Автозапуск анимации остывания/прогрева — пользователь сразу
+            # видит динамику, а не статичный кадр.
+            self._autostart_transient_animation()
             # Активируем кнопки экспорта.
             for btn_name in ("btn_vtu", "btn_csv", "btn_report"):
                 if hasattr(self, btn_name):
@@ -1453,6 +1470,88 @@ class MainWindow(QMainWindow):
     def _active_material(self):
         """Возвращает Material с rho/cp если активен материал из библиотеки."""
         return None
+
+    # =========================================================================
+    # Конвективный теплообмен при обтекании (обдув).
+    # =========================================================================
+    def _on_forced_convection(self) -> None:
+        """Диалог обдува: расчёт Re/Nu/h и (опц.) назначение конвекции на грани."""
+        if self.problem.nodes is None:
+            QMessageBox.information(self, "Нет сетки",
+                                    "Сначала постройте сетку.")
+            return
+        from fem3d import convection as cv
+        # Подсказка по T поверхности: среднее из последнего расчёта, если есть.
+        t_hint = (float(self.problem.T.mean())
+                  if getattr(self.problem, "T", None) is not None
+                  and self.problem.T.size else None)
+        dlg = ForcedConvectionDialog(self, T_surface_hint=t_hint)
+        if not dlg.exec_():
+            return
+        p = dlg.params()
+        try:
+            if p["apply"]:
+                res = cv.apply_forced_convection_bc(
+                    self.problem, speed=p["speed"], direction=p["direction"],
+                    shape=p["shape"], T_inf=p["T_inf"],
+                    T_surface=p["T_surface"], orient_weighting=p["orient"])
+                # Обновляем подсветку ГУ и карточки граней.
+                self._refresh_view_from_problem(rebuild_geometry=False)
+                if hasattr(self, "_sync_summaries"):
+                    self._sync_summaries()
+                applied = ("\n\nКонвекция (α = h) назначена на грани. "
+                           "Запустите расчёт, чтобы увидеть поле T.")
+            else:
+                res = cv.analyze_forced_convection(
+                    self.problem, speed=p["speed"], direction=p["direction"],
+                    shape=p["shape"], T_inf=p["T_inf"],
+                    T_surface=p["T_surface"])
+                applied = ""
+            QMessageBox.information(self, "Конвекция при обтекании",
+                                    res.report_text() + applied)
+        except Exception as exc:
+            QMessageBox.critical(self, "Ошибка", str(exc))
+
+    def _on_surface_and_nusselt(self) -> None:
+        """Показать площадь поверхности и число Нуссельта на гранях с конвекцией."""
+        if self.problem.nodes is None:
+            QMessageBox.information(self, "Нет сетки",
+                                    "Сначала постройте сетку.")
+            return
+        from fem3d import convection as cv
+        from fem3d.postprocess import compute_nusselt
+        from fem3d.core_bridge import BC_ROBIN
+        areas = cv.surface_areas(self.problem)
+        lines = ["Площадь поверхности фигуры:"]
+        for fid, area in areas["per_face"].items():
+            lines.append(f"  грань {areas['labels'][fid]:>3}: {area:.5g} м²")
+        lines.append(f"  ИТОГО: {areas['total']:.5g} м²")
+
+        # Число Нуссельта на гранях с конвекцией (если есть результат расчёта).
+        if (getattr(self.problem, "T", None) is not None
+                and self.problem.T.size
+                and getattr(self.problem, "flux", None) is not None):
+            air = cv.air_properties(float(self.problem.T.mean()))
+            lines.append("\nЧисло Нуссельта (λ воздуха) на гранях с конвекцией:")
+            any_robin = False
+            for fid in range(6):
+                bc = self.problem.bcs.get(fid)
+                if bc is None or bc.type != BC_ROBIN:
+                    continue
+                any_robin = True
+                nu = compute_nusselt(self.problem, fid, fluid_lambda=air.k)
+                if "Nu" in nu:
+                    lines.append(
+                        f"  {areas['labels'][fid]:>3}: Nu={nu['Nu']:.1f}, "
+                        f"h={nu['h_actual']:.2f} Вт/(м²·К), "
+                        f"Bi={nu['Bi']:.3g}")
+            if not any_robin:
+                lines.append("  (нет граней с конвекцией)")
+        else:
+            lines.append("\nДля числа Нуссельта сначала выполните расчёт.")
+
+        QMessageBox.information(self, "Площадь и число Нуссельта",
+                                "\n".join(lines))
 
     def _on_add_observation_point(self) -> None:
         """Включить режим установки точки наблюдения кликом в 3D."""
@@ -1608,11 +1707,23 @@ class MainWindow(QMainWindow):
             parent_layout = self.viz.parent().layout()
             if parent_layout is not None:
                 parent_layout.addWidget(w)
-        # Настройка слайдера.
+        # Настройка слайдера. Стартуем с НАЧАЛЬНОГО кадра (t=0), чтобы было
+        # видно нагретое тело и последующее остывание, а не конечный кадр.
         n = len(self._transient_times)
         self._tp_slider.setMaximum(n - 1)
-        self._tp_slider.setValue(n - 1)
+        self._tp_slider.setValue(0)
         self._transient_player_widget.show()
+
+    def _autostart_transient_animation(self) -> None:
+        """Автоматически запустить проигрывание T(t) с начала."""
+        if not hasattr(self, "_tp_slider"):
+            return
+        self._tp_slider.setValue(0)
+        if not getattr(self, "_tp_playing", False):
+            # Имитируем нажатие ▶: запускаем таймер с кадра 0.
+            self._tp_playing = True
+            self._tp_play_btn.setText("⏸")
+            self._tp_timer.start()
 
     def _on_transient_slider(self, idx: int) -> None:
         if not hasattr(self, "_transient_T_history") \

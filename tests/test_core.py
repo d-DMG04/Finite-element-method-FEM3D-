@@ -561,3 +561,82 @@ class TestNodeDirichlet:
             br.solve(tol=1e-12)
             T = br.get_temperature()
             assert abs(T[0] - 10.0) < 1e-9
+
+
+# =============================================================================
+# Конвективный теплообмен при обтекании (модуль fem3d.convection).
+# =============================================================================
+class TestConvection:
+    """Проверка вынужденной конвекции: свойства воздуха, площади, Re/Nu/h."""
+
+    def test_air_properties_room_temperature(self):
+        """Свойства воздуха при ~27 °C совпадают с табличными (Incropera)."""
+        from fem3d import convection as cv
+        a = cv.air_properties(26.85)  # 300 K
+        assert a.Pr == pytest.approx(0.707, abs=0.01)
+        assert a.k == pytest.approx(0.0263, abs=0.001)
+        assert a.nu == pytest.approx(15.89e-6, rel=0.02)
+
+    def test_surface_area_box(self):
+        """Площадь поверхности box = 2(ab+bc+ac)."""
+        from fem3d import convection as cv
+        from fem3d import Problem, BoxGeometry
+        p = Problem(geometry=BoxGeometry(Lx=0.2, Ly=0.15, Lz=0.05))
+        A = cv.surface_areas(p)
+        expected = 2 * (0.2 * 0.15 + 0.15 * 0.05 + 0.2 * 0.05)
+        assert A["total"] == pytest.approx(expected, abs=1e-12)
+
+    def test_reynolds_and_nusselt_plate(self):
+        """Re и Nu пластины — ручной контроль формулы 0.664·Re^0.5·Pr^(1/3)."""
+        from fem3d import convection as cv
+        air = cv.air_properties(60.0)
+        Re = cv.reynolds(10.0, 0.2, air)
+        assert Re == pytest.approx(10.0 * 0.2 / air.nu, rel=1e-9)
+        Nu, _ = cv.nusselt_forced(Re, air.Pr, cv.SHAPE_PLATE)
+        manual = 0.664 * Re ** 0.5 * air.Pr ** (1.0 / 3.0)
+        assert Nu == pytest.approx(manual, rel=1e-9)
+
+    def test_h_increases_with_speed(self):
+        """Коэффициент теплоотдачи растёт со скоростью потока."""
+        from fem3d import convection as cv
+        from fem3d import Problem, BoxGeometry
+        p = Problem(geometry=BoxGeometry(Lx=0.3, Ly=0.2, Lz=0.02))
+        h1 = cv.analyze_forced_convection(p, 1.0, "+x", cv.SHAPE_PLATE,
+                                          T_inf=20.0, T_surface=80.0).h
+        h2 = cv.analyze_forced_convection(p, 10.0, "+x", cv.SHAPE_PLATE,
+                                          T_inf=20.0, T_surface=80.0).h
+        assert h2 > h1 > 0
+
+    def test_flow_face_classification(self):
+        """Поток +X: грань X− наветренная, X+ подветренная, остальные боковые."""
+        from fem3d import convection as cv
+        from fem3d import Problem, BoxGeometry
+        p = Problem(geometry=BoxGeometry())
+        roles = cv.faces_exposed_to_flow(p, "+x")
+        assert roles[0]["role"] == "наветренная"   # X-
+        assert roles[1]["role"] == "подветренная"  # X+
+        assert roles[4]["role"] == "боковая"       # Z-
+
+    def test_closure_via_fem(self):
+        """Полное замыкание: задаём h по потоку, решаем, восстанавливаем h.
+
+        Восстановленный из поля T коэффициент должен совпасть с заданным
+        в пределах точности P1-МКЭ у поверхности (~5%).
+        """
+        from fem3d import convection as cv
+        from fem3d import Problem, BoxGeometry, CoreBridge, FACE_X_MINUS
+        from fem3d.postprocess import compute_nusselt
+        p = Problem(geometry=BoxGeometry(Lx=0.2, Ly=0.2, Lz=0.02,
+                                         nx=20, ny=20, nz=4),
+                    lambda_=237.0)
+        p.Q = 1.0e5
+        res = cv.apply_forced_convection_bc(p, 10.0, "+x", cv.SHAPE_PLATE,
+                                            T_inf=20.0, T_surface=80.0)
+        with CoreBridge() as b:
+            p.build_mesh_in_core(b)
+            p.solve(b)
+        nu = compute_nusselt(p, FACE_X_MINUS,
+                             characteristic_length=res.char_length,
+                             fluid_lambda=res.fluid.k)
+        rel_err = abs(nu["h_actual"] - res.h) / res.h
+        assert rel_err < 0.05, f"расхождение h {rel_err*100:.1f}% > 5%"

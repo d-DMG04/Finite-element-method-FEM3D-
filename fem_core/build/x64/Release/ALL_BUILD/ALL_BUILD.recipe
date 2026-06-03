@@ -2,13 +2,13 @@
 <Project>
   <ProjectOutputs>
     <ProjectOutput>
-      <FullPath>C:\Users\Scrollend\Downloads\fem_heat3d_v1.2\fem_heat3d\fem_core\build\x64\Release\ZERO_CHECK</FullPath>
+      <FullPath>C:\Users\Scrollend\Downloads\fem_heat3d_v1.17\fem_heat3d\fem_core\build\x64\Release\ZERO_CHECK</FullPath>
     </ProjectOutput>
     <ProjectOutput>
-      <FullPath>C:\Users\Scrollend\Downloads\fem_heat3d_v1.2\fem_heat3d\fem_core\build\fem_core.dll</FullPath>
+      <FullPath>C:\Users\Scrollend\Downloads\fem_heat3d_v1.17\fem_heat3d\fem_core\build\fem_core.dll</FullPath>
     </ProjectOutput>
     <ProjectOutput>
-      <FullPath>C:\Users\Scrollend\Downloads\fem_heat3d_v1.2\fem_heat3d\fem_core\build\x64\Release\ALL_BUILD</FullPath>
+      <FullPath>C:\Users\Scrollend\Downloads\fem_heat3d_v1.17\fem_heat3d\fem_core\build\x64\Release\ALL_BUILD</FullPath>
     </ProjectOutput>
   </ProjectOutputs>
   <ContentFiles />

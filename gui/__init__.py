@@ -28,7 +28,7 @@ from .dialogs import (AppSettings, SettingsDialog, HelpDialog,
                       GeometryDialog, MaterialDialog,
                       MaterialEditorDialog, MaterialLibraryDialog,
                       BoundaryConditionsDialog, TransientParamsDialog,
-                      TemplateGalleryDialog)
+                      TemplateGalleryDialog, ForcedConvectionDialog)
 from .worker import SolverWorker
 
 __all__ = [
@@ -48,6 +48,6 @@ __all__ = [
     "GeometryDialog", "MaterialDialog",
     "MaterialEditorDialog", "MaterialLibraryDialog",
     "BoundaryConditionsDialog", "TransientParamsDialog",
-    "TemplateGalleryDialog",
+    "TemplateGalleryDialog", "ForcedConvectionDialog",
     "SolverWorker",
 ]

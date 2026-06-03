@@ -1646,10 +1646,13 @@ class TransientParamsDialog(QDialog):
         self.t_init_spin = QDoubleSpinBox()
         self.t_init_spin.setRange(-273.0, 5000.0)
         self.t_init_spin.setDecimals(2)
-        self.t_init_spin.setValue(20.0)
+        self.t_init_spin.setValue(100.0)
         self.t_init_spin.setSuffix(" °C")
         self.t_init_spin.setToolTip(
-            "Начальная температура во всех узлах при t=0.")
+            "Начальная температура во ВСЕХ узлах тела при t=0.\n"
+            "Чтобы увидеть динамику (нагрев/остывание), она должна\n"
+            "ОТЛИЧАТЬСЯ от температуры среды T∞ в условиях конвекции.\n"
+            "Например: T₀=100 °C при конвекции с T∞=20 °C → остывание.")
         form.addRow("Начальная T₀:", self.t_init_spin)
 
         self.n_save_spin = QSpinBox()
@@ -1819,3 +1822,138 @@ class TemplateGalleryDialog(QDialog):
 
     def chosen_factory(self):
         return self._chosen
+
+
+# =============================================================================
+# Диалог: конвективный теплообмен при обтекании потоком.
+# =============================================================================
+class ForcedConvectionDialog(QDialog):
+    """Параметры обдува: скорость, направление, форма тела, T среды.
+
+    По нажатию OK возвращает params(); вызывающий код считает Re/Nu/h и
+    (опционально) назначает конвекцию на грани.
+    """
+
+    DIRECTIONS = [("+X", "+x"), ("−X", "-x"), ("+Y", "+y"),
+                  ("−Y", "-y"), ("+Z", "+z"), ("−Z", "-z")]
+
+    def __init__(self, parent=None, T_surface_hint: float = None):
+        super().__init__(parent)
+        from fem3d import convection as cv
+        self._cv = cv
+        self.setWindowTitle("Конвективный теплообмен при обтекании")
+        self.setModal(True)
+        self.resize(520, 480)
+
+        lay = QVBoxLayout(self)
+        hint = QLabel(
+            "Вынужденная конвекция при обтекании тела потоком воздуха.\n"
+            "Цепочка расчёта:  U, L → Re = U·L/ν → Nu (корреляция формы)\n"
+            "→ h = Nu·λ_возд/L → ГУ конвекции (α = h) → поток Q = h·A·ΔT.")
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color:#9ca0aa; padding:4px;")
+        lay.addWidget(hint)
+
+        form = QFormLayout()
+
+        self.speed_spin = QDoubleSpinBox()
+        self.speed_spin.setRange(0.0, 500.0)
+        self.speed_spin.setDecimals(2)
+        self.speed_spin.setValue(5.0)
+        self.speed_spin.setSuffix(" м/с")
+        self.speed_spin.setToolTip("Скорость набегающего потока воздуха U.")
+        form.addRow("Скорость потока U:", self.speed_spin)
+
+        self.dir_combo = QComboBox()
+        for label, _ in self.DIRECTIONS:
+            self.dir_combo.addItem(label)
+        self.dir_combo.setToolTip("Направление потока вдоль выбранной оси.")
+        form.addRow("Направление потока:", self.dir_combo)
+
+        self.shape_combo = QComboBox()
+        self._shapes = [
+            (cv.SHAPE_PLATE, cv.SHAPE_NAMES[cv.SHAPE_PLATE]),
+            (cv.SHAPE_CYLINDER, cv.SHAPE_NAMES[cv.SHAPE_CYLINDER]),
+            (cv.SHAPE_SPHERE, cv.SHAPE_NAMES[cv.SHAPE_SPHERE]),
+            (cv.SHAPE_CUBE, cv.SHAPE_NAMES[cv.SHAPE_CUBE]),
+        ]
+        for _, name in self._shapes:
+            self.shape_combo.addItem(name)
+        self.shape_combo.setToolTip(
+            "Форма тела определяет эмпирическую корреляцию для Nu.")
+        form.addRow("Форма тела:", self.shape_combo)
+
+        self.tinf_spin = QDoubleSpinBox()
+        self.tinf_spin.setRange(-273.0, 2000.0)
+        self.tinf_spin.setDecimals(1)
+        self.tinf_spin.setValue(20.0)
+        self.tinf_spin.setSuffix(" °C")
+        self.tinf_spin.setToolTip("Температура набегающего потока (среды) T∞.")
+        form.addRow("Температура среды T∞:", self.tinf_spin)
+
+        self.tsurf_spin = QDoubleSpinBox()
+        self.tsurf_spin.setRange(-273.0, 5000.0)
+        self.tsurf_spin.setDecimals(1)
+        self.tsurf_spin.setValue(float(T_surface_hint)
+                                 if T_surface_hint is not None else 80.0)
+        self.tsurf_spin.setSuffix(" °C")
+        self.tsurf_spin.setToolTip(
+            "Оценка средней температуры поверхности (для свойств плёнки\n"
+            "и оценки потока Q). После расчёта можно уточнить.")
+        form.addRow("Оценка T поверхности:", self.tsurf_spin)
+
+        self.apply_check = QCheckBox(
+            "Назначить рассчитанный h как конвекцию на все грани")
+        self.apply_check.setChecked(True)
+        form.addRow("", self.apply_check)
+
+        self.orient_check = QCheckBox(
+            "Учитывать ориентацию граней (наветр.×1, бок.×0.7, подветр.×0.5)")
+        self.orient_check.setChecked(False)
+        form.addRow("", self.orient_check)
+
+        lay.addLayout(form)
+
+        self.report = QTextBrowser()
+        self.report.setMinimumHeight(150)
+        self.report.setStyleSheet("font-family: monospace; font-size: 11px;")
+        lay.addWidget(self.report)
+
+        btns = QHBoxLayout()
+        self.calc_btn = QPushButton("Рассчитать (предпросмотр)")
+        self.calc_btn.clicked.connect(self._preview)
+        btns.addWidget(self.calc_btn)
+        lay.addLayout(btns)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        lay.addWidget(buttons)
+
+        self._problem = parent.problem if parent is not None else None
+
+    def _preview(self):
+        """Посчитать и показать отчёт без изменения задачи."""
+        if self._problem is None or self._problem.nodes is None:
+            self.report.setPlainText("Сначала постройте сетку.")
+            return
+        p = self.params()
+        try:
+            res = self._cv.analyze_forced_convection(
+                self._problem, speed=p["speed"], direction=p["direction"],
+                shape=p["shape"], T_inf=p["T_inf"], T_surface=p["T_surface"])
+            self.report.setPlainText(res.report_text())
+        except Exception as exc:
+            self.report.setPlainText(f"Ошибка: {exc}")
+
+    def params(self) -> dict:
+        return {
+            "speed":     float(self.speed_spin.value()),
+            "direction": self.DIRECTIONS[self.dir_combo.currentIndex()][1],
+            "shape":     self._shapes[self.shape_combo.currentIndex()][0],
+            "T_inf":     float(self.tinf_spin.value()),
+            "T_surface": float(self.tsurf_spin.value()),
+            "apply":     bool(self.apply_check.isChecked()),
+            "orient":    bool(self.orient_check.isChecked()),
+        }

@@ -411,13 +411,19 @@ def slice_by_plane(problem: Problem, axis: str, value: float,
 # =============================================================================
 
 def compute_nusselt(problem: Problem, face_id: int,
-                     characteristic_length: float = None) -> dict:
+                     characteristic_length: float = None,
+                     fluid_lambda: float = None) -> dict:
     """Число Нуссельта на грани с конвекцией.
 
     Nu = h · L / λ, где
         h  — реальный коэффициент теплоотдачи (из поля T и q)
         L  — характерный размер (например, длина грани)
-        λ  — коэффициент теплопроводности жидкости (берётся из задачи)
+        λ  — коэффициент теплопроводности СРЕДЫ (жидкости/газа).
+
+    fluid_lambda — теплопроводность среды (воздуха и т.п.), Вт/(м·К).
+        Физически Nu определяется именно по λ СРЕДЫ, а не тела. Если None,
+        для обратной совместимости берётся λ тела (problem.lambda_); для
+        корректного Nu при обдуве воздухом передавайте λ_воздуха ≈ 0.026.
 
     На грани с условием Робена (конвекции) расчёт даёт фактический h из:
         q_n = h · (T_wall - T_inf)  =>  h = q_n / (T_wall - T_inf)
@@ -461,13 +467,16 @@ def compute_nusselt(problem: Problem, face_id: int,
         else:           L = max(g.Lx, g.Ly)
     else:
         L = float(characteristic_length)
-    Nu = h_actual * L / problem.lambda_
-    Bi = bc.alpha * L / problem.lambda_  # число Био
+    # λ среды для Nu (физически верно), λ тела для Bi (сопротивление в теле).
+    lam_fluid = float(fluid_lambda) if fluid_lambda else problem.lambda_
+    Nu = h_actual * L / lam_fluid
+    Bi = bc.alpha * L / problem.lambda_  # число Био (по λ тела)
     return {
         "Nu":           Nu,
         "Bi":           Bi,
         "h_actual":     h_actual,
         "h_BC":         bc.alpha,
+        "lambda_fluid": lam_fluid,
         "T_wall_mean":  T_wall,
         "T_inf":        bc.T_inf,
         "delta_T":      delta_T,

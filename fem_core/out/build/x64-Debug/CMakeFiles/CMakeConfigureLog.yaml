@@ -23,11 +23,11 @@ events:
       
       The output was:
       0
-      Оптимизирующий компилятор Microsoft (R) C/C++ версии 19.44.35225 для x64
+      Оптимизирующий компилятор Microsoft (R) C/C++ версии 19.44.35227 для x64
       (C) Корпорация Майкрософт (Microsoft Corporation).  Все права защищены.
       
       CMakeCXXCompilerId.cpp
-      Microsoft (R) Incremental Linker Version 14.44.35225.0
+      Microsoft (R) Incremental Linker Version 14.44.35227.0
       Copyright (C) Microsoft Corporation.  All rights reserved.
       
       /out:CMakeCXXCompilerId.exe 
@@ -39,7 +39,7 @@ events:
       Compilation of the CXX compiler identification source "CMakeCXXCompilerId.cpp" produced "CMakeCXXCompilerId.obj"
       
       The CXX compiler identification is MSVC, found in:
-        C:/Users/Scrollend/Downloads/fem_heat3d_v1.2/fem_heat3d/fem_core/out/build/x64-Debug/CMakeFiles/3.31.6-msvc6/CompilerIdCXX/CMakeCXXCompilerId.exe
+        C:/Users/Scrollend/Downloads/fem_heat3d_v1.17/fem_heat3d/fem_core/out/build/x64-Debug/CMakeFiles/3.31.6-msvc6/CompilerIdCXX/CMakeCXXCompilerId.exe
       
   -
     kind: "message-v1"
@@ -51,7 +51,7 @@ events:
     message: |
       Detecting CXX compiler /showIncludes prefix:
         main.c
-        Примечание: включение файла:  C:\\Users\\Scrollend\\Downloads\\fem_heat3d_v1.2\\fem_heat3d\\fem_core\\out\\build\\x64-Debug\\CMakeFiles\\ShowIncludes\\foo.h
+        Примечание: включение файла:  C:\\Users\\Scrollend\\Downloads\\fem_heat3d_v1.17\\fem_heat3d\\fem_core\\out\\build\\x64-Debug\\CMakeFiles\\ShowIncludes\\foo.h
         
       Found prefix "Примечание: включение файла:  "
   -
@@ -63,8 +63,8 @@ events:
     checks:
       - "Detecting CXX compiler ABI info"
     directories:
-      source: "C:/Users/Scrollend/Downloads/fem_heat3d_v1.2/fem_heat3d/fem_core/out/build/x64-Debug/CMakeFiles/CMakeScratch/TryCompile-5bbqll"
-      binary: "C:/Users/Scrollend/Downloads/fem_heat3d_v1.2/fem_heat3d/fem_core/out/build/x64-Debug/CMakeFiles/CMakeScratch/TryCompile-5bbqll"
+      source: "C:/Users/Scrollend/Downloads/fem_heat3d_v1.17/fem_heat3d/fem_core/out/build/x64-Debug/CMakeFiles/CMakeScratch/TryCompile-i0w8jf"
+      binary: "C:/Users/Scrollend/Downloads/fem_heat3d_v1.17/fem_heat3d/fem_core/out/build/x64-Debug/CMakeFiles/CMakeScratch/TryCompile-i0w8jf"
     cmakeVariables:
       CMAKE_CXX_FLAGS: "/DWIN32 /D_WINDOWS /GR /EHsc"
       CMAKE_CXX_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
@@ -74,11 +74,11 @@ events:
       variable: "CMAKE_CXX_ABI_COMPILED"
       cached: true
       stdout: |
-        Change Dir: 'C:/Users/Scrollend/Downloads/fem_heat3d_v1.2/fem_heat3d/fem_core/out/build/x64-Debug/CMakeFiles/CMakeScratch/TryCompile-5bbqll'
+        Change Dir: 'C:/Users/Scrollend/Downloads/fem_heat3d_v1.17/fem_heat3d/fem_core/out/build/x64-Debug/CMakeFiles/CMakeScratch/TryCompile-i0w8jf'
         
-        Run Build Command(s): "C:/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja/ninja.exe" -v cmTC_d72f1
-        [1/2] C:\\PROGRA~1\\MICROS~4\\2022\\COMMUN~1\\VC\\Tools\\MSVC\\1444~1.352\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP   /DWIN32 /D_WINDOWS /GR /EHsc  /Zi /Ob0 /Od /RTC1 -MDd /showIncludes /FoCMakeFiles\\cmTC_d72f1.dir\\CMakeCXXCompilerABI.cpp.obj /FdCMakeFiles\\cmTC_d72f1.dir\\ /FS -c "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\share\\cmake-3.31\\Modules\\CMakeCXXCompilerABI.cpp"
-        [2/2] C:\\WINDOWS\\system32\\cmd.exe /C "cd . && "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\cmake.exe" -E vs_link_exe --msvc-ver=1944 --intdir=CMakeFiles\\cmTC_d72f1.dir --rc=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe --mt=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\mt.exe --manifests  -- C:\\PROGRA~1\\MICROS~4\\2022\\COMMUN~1\\VC\\Tools\\MSVC\\1444~1.352\\bin\\Hostx64\\x64\\link.exe /nologo CMakeFiles\\cmTC_d72f1.dir\\CMakeCXXCompilerABI.cpp.obj  /out:cmTC_d72f1.exe /implib:cmTC_d72f1.lib /pdb:cmTC_d72f1.pdb /version:0.0 /machine:x64  /debug /INCREMENTAL /subsystem:console  kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib && cd ."
+        Run Build Command(s): "C:/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja/ninja.exe" -v cmTC_363f6
+        [1/2] C:\\PROGRA~1\\MICROS~4\\2022\\COMMUN~1\\VC\\Tools\\MSVC\\1444~1.352\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP   /DWIN32 /D_WINDOWS /GR /EHsc  /Zi /Ob0 /Od /RTC1 -MDd /showIncludes /FoCMakeFiles\\cmTC_363f6.dir\\CMakeCXXCompilerABI.cpp.obj /FdCMakeFiles\\cmTC_363f6.dir\\ /FS -c "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\share\\cmake-3.31\\Modules\\CMakeCXXCompilerABI.cpp"
+        [2/2] C:\\WINDOWS\\system32\\cmd.exe /C "cd . && "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\cmake.exe" -E vs_link_exe --msvc-ver=1944 --intdir=CMakeFiles\\cmTC_363f6.dir --rc=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe --mt=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\mt.exe --manifests  -- C:\\PROGRA~1\\MICROS~4\\2022\\COMMUN~1\\VC\\Tools\\MSVC\\1444~1.352\\bin\\Hostx64\\x64\\link.exe /nologo CMakeFiles\\cmTC_363f6.dir\\CMakeCXXCompilerABI.cpp.obj  /out:cmTC_363f6.exe /implib:cmTC_363f6.lib /pdb:cmTC_363f6.pdb /version:0.0 /machine:x64  /debug /INCREMENTAL /subsystem:console  kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib && cd ."
         
       exitCode: 0
   -
@@ -107,7 +107,7 @@ events:
       - "CMakeLists.txt:20 (project)"
     message: |
       Running the CXX compiler's linker: "C:/PROGRA~1/MICROS~4/2022/COMMUN~1/VC/Tools/MSVC/1444~1.352/bin/Hostx64/x64/link.exe" "-v"
-      Microsoft (R) Incremental Linker Version 14.44.35225.0
+      Microsoft (R) Incremental Linker Version 14.44.35227.0
       Copyright (C) Microsoft Corporation.  All rights reserved.
   -
     kind: "try_compile-v1"
@@ -117,8 +117,8 @@ events:
       - "CMakeLists.txt:64 (find_package)"
     description: "Detecting CXX OpenMP compiler info"
     directories:
-      source: "C:/Users/Scrollend/Downloads/fem_heat3d_v1.2/fem_heat3d/fem_core/out/build/x64-Debug/CMakeFiles/CMakeScratch/TryCompile-855rej"
-      binary: "C:/Users/Scrollend/Downloads/fem_heat3d_v1.2/fem_heat3d/fem_core/out/build/x64-Debug/CMakeFiles/CMakeScratch/TryCompile-855rej"
+      source: "C:/Users/Scrollend/Downloads/fem_heat3d_v1.17/fem_heat3d/fem_core/out/build/x64-Debug/CMakeFiles/CMakeScratch/TryCompile-l3r7vq"
+      binary: "C:/Users/Scrollend/Downloads/fem_heat3d_v1.17/fem_heat3d/fem_core/out/build/x64-Debug/CMakeFiles/CMakeScratch/TryCompile-l3r7vq"
     cmakeVariables:
       CMAKE_CXX_FLAGS: "/DWIN32 /D_WINDOWS /GR /EHsc"
       CMAKE_CXX_FLAGS_DEBUG: "/Zi /Ob0 /Od "
@@ -127,11 +127,11 @@ events:
       variable: "OpenMP_COMPILE_RESULT_CXX_openmp"
       cached: true
       stdout: |
-        Change Dir: 'C:/Users/Scrollend/Downloads/fem_heat3d_v1.2/fem_heat3d/fem_core/out/build/x64-Debug/CMakeFiles/CMakeScratch/TryCompile-855rej'
+        Change Dir: 'C:/Users/Scrollend/Downloads/fem_heat3d_v1.17/fem_heat3d/fem_core/out/build/x64-Debug/CMakeFiles/CMakeScratch/TryCompile-l3r7vq'
         
-        Run Build Command(s): "C:/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja/ninja.exe" -v cmTC_080e9
-        [1/2] C:\\PROGRA~1\\MICROS~4\\2022\\COMMUN~1\\VC\\Tools\\MSVC\\1444~1.352\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP   /DWIN32 /D_WINDOWS /GR /EHsc -openmp /Zi /Ob0 /Od  -std:c++17 -MDd /showIncludes /FoCMakeFiles\\cmTC_080e9.dir\\OpenMPTryFlag.cpp.obj /FdCMakeFiles\\cmTC_080e9.dir\\ /FS -c C:\\Users\\Scrollend\\Downloads\\fem_heat3d_v1.2\\fem_heat3d\\fem_core\\out\\build\\x64-Debug\\CMakeFiles\\CMakeScratch\\TryCompile-855rej\\OpenMPTryFlag.cpp
-        [2/2] C:\\WINDOWS\\system32\\cmd.exe /C "cd . && "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\cmake.exe" -E vs_link_exe --msvc-ver=1944 --intdir=CMakeFiles\\cmTC_080e9.dir --rc=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe --mt=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\mt.exe --manifests  -- C:\\PROGRA~1\\MICROS~4\\2022\\COMMUN~1\\VC\\Tools\\MSVC\\1444~1.352\\bin\\Hostx64\\x64\\link.exe /nologo CMakeFiles\\cmTC_080e9.dir\\OpenMPTryFlag.cpp.obj  /out:cmTC_080e9.exe /implib:cmTC_080e9.lib /pdb:cmTC_080e9.pdb /version:0.0 /machine:x64  /debug /INCREMENTAL /subsystem:console  kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib && cd ."
+        Run Build Command(s): "C:/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja/ninja.exe" -v cmTC_73c6a
+        [1/2] C:\\PROGRA~1\\MICROS~4\\2022\\COMMUN~1\\VC\\Tools\\MSVC\\1444~1.352\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP   /DWIN32 /D_WINDOWS /GR /EHsc -openmp /Zi /Ob0 /Od  -std:c++17 -MDd /showIncludes /FoCMakeFiles\\cmTC_73c6a.dir\\OpenMPTryFlag.cpp.obj /FdCMakeFiles\\cmTC_73c6a.dir\\ /FS -c C:\\Users\\Scrollend\\Downloads\\fem_heat3d_v1.17\\fem_heat3d\\fem_core\\out\\build\\x64-Debug\\CMakeFiles\\CMakeScratch\\TryCompile-l3r7vq\\OpenMPTryFlag.cpp
+        [2/2] C:\\WINDOWS\\system32\\cmd.exe /C "cd . && "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\cmake.exe" -E vs_link_exe --msvc-ver=1944 --intdir=CMakeFiles\\cmTC_73c6a.dir --rc=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe --mt=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\mt.exe --manifests  -- C:\\PROGRA~1\\MICROS~4\\2022\\COMMUN~1\\VC\\Tools\\MSVC\\1444~1.352\\bin\\Hostx64\\x64\\link.exe /nologo CMakeFiles\\cmTC_73c6a.dir\\OpenMPTryFlag.cpp.obj  /out:cmTC_73c6a.exe /implib:cmTC_73c6a.lib /pdb:cmTC_73c6a.pdb /version:0.0 /machine:x64  /debug /INCREMENTAL /subsystem:console  kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib && cd ."
         
       exitCode: 0
   -
@@ -142,8 +142,8 @@ events:
       - "CMakeLists.txt:64 (find_package)"
     description: "Detecting CXX OpenMP version"
     directories:
-      source: "C:/Users/Scrollend/Downloads/fem_heat3d_v1.2/fem_heat3d/fem_core/out/build/x64-Debug/CMakeFiles/CMakeScratch/TryCompile-lziptc"
-      binary: "C:/Users/Scrollend/Downloads/fem_heat3d_v1.2/fem_heat3d/fem_core/out/build/x64-Debug/CMakeFiles/CMakeScratch/TryCompile-lziptc"
+      source: "C:/Users/Scrollend/Downloads/fem_heat3d_v1.17/fem_heat3d/fem_core/out/build/x64-Debug/CMakeFiles/CMakeScratch/TryCompile-re9d0y"
+      binary: "C:/Users/Scrollend/Downloads/fem_heat3d_v1.17/fem_heat3d/fem_core/out/build/x64-Debug/CMakeFiles/CMakeScratch/TryCompile-re9d0y"
     cmakeVariables:
       CMAKE_CXX_FLAGS: "/DWIN32 /D_WINDOWS /GR /EHsc"
       CMAKE_CXX_FLAGS_DEBUG: "/Zi /Ob0 /Od "
@@ -152,11 +152,11 @@ events:
       variable: "OpenMP_SPECTEST_CXX_"
       cached: true
       stdout: |
-        Change Dir: 'C:/Users/Scrollend/Downloads/fem_heat3d_v1.2/fem_heat3d/fem_core/out/build/x64-Debug/CMakeFiles/CMakeScratch/TryCompile-lziptc'
+        Change Dir: 'C:/Users/Scrollend/Downloads/fem_heat3d_v1.17/fem_heat3d/fem_core/out/build/x64-Debug/CMakeFiles/CMakeScratch/TryCompile-re9d0y'
         
-        Run Build Command(s): "C:/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja/ninja.exe" -v cmTC_62494
-        [1/2] C:\\PROGRA~1\\MICROS~4\\2022\\COMMUN~1\\VC\\Tools\\MSVC\\1444~1.352\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP   /DWIN32 /D_WINDOWS /GR /EHsc -openmp /Zi /Ob0 /Od  -std:c++17 -MDd /showIncludes /FoCMakeFiles\\cmTC_62494.dir\\OpenMPCheckVersion.cpp.obj /FdCMakeFiles\\cmTC_62494.dir\\ /FS -c C:\\Users\\Scrollend\\Downloads\\fem_heat3d_v1.2\\fem_heat3d\\fem_core\\out\\build\\x64-Debug\\CMakeFiles\\CMakeScratch\\TryCompile-lziptc\\OpenMPCheckVersion.cpp
-        [2/2] C:\\WINDOWS\\system32\\cmd.exe /C "cd . && "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\cmake.exe" -E vs_link_exe --msvc-ver=1944 --intdir=CMakeFiles\\cmTC_62494.dir --rc=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe --mt=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\mt.exe --manifests  -- C:\\PROGRA~1\\MICROS~4\\2022\\COMMUN~1\\VC\\Tools\\MSVC\\1444~1.352\\bin\\Hostx64\\x64\\link.exe /nologo CMakeFiles\\cmTC_62494.dir\\OpenMPCheckVersion.cpp.obj  /out:cmTC_62494.exe /implib:cmTC_62494.lib /pdb:cmTC_62494.pdb /version:0.0 /machine:x64  /debug /INCREMENTAL /subsystem:console  kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib && cd ."
+        Run Build Command(s): "C:/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja/ninja.exe" -v cmTC_c8a0f
+        [1/2] C:\\PROGRA~1\\MICROS~4\\2022\\COMMUN~1\\VC\\Tools\\MSVC\\1444~1.352\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP   /DWIN32 /D_WINDOWS /GR /EHsc -openmp /Zi /Ob0 /Od  -std:c++17 -MDd /showIncludes /FoCMakeFiles\\cmTC_c8a0f.dir\\OpenMPCheckVersion.cpp.obj /FdCMakeFiles\\cmTC_c8a0f.dir\\ /FS -c C:\\Users\\Scrollend\\Downloads\\fem_heat3d_v1.17\\fem_heat3d\\fem_core\\out\\build\\x64-Debug\\CMakeFiles\\CMakeScratch\\TryCompile-re9d0y\\OpenMPCheckVersion.cpp
+        [2/2] C:\\WINDOWS\\system32\\cmd.exe /C "cd . && "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\cmake.exe" -E vs_link_exe --msvc-ver=1944 --intdir=CMakeFiles\\cmTC_c8a0f.dir --rc=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe --mt=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\mt.exe --manifests  -- C:\\PROGRA~1\\MICROS~4\\2022\\COMMUN~1\\VC\\Tools\\MSVC\\1444~1.352\\bin\\Hostx64\\x64\\link.exe /nologo CMakeFiles\\cmTC_c8a0f.dir\\OpenMPCheckVersion.cpp.obj  /out:cmTC_c8a0f.exe /implib:cmTC_c8a0f.lib /pdb:cmTC_c8a0f.pdb /version:0.0 /machine:x64  /debug /INCREMENTAL /subsystem:console  kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib && cd ."
         
       exitCode: 0
 ...
