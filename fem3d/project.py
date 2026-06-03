@@ -47,6 +47,12 @@ def save_project(problem: Problem, path: str,
         # Теплофизические свойства (нестационарная задача).
         "rho":                   getattr(problem, "rho", 0.0),
         "cp":                    getattr(problem, "cp", 0.0),
+        # Обдув основной фигуры (вынужденная конвекция).
+        "air_flow_enabled":      getattr(problem, "air_flow_enabled", False),
+        "air_flow_speed":        getattr(problem, "air_flow_speed", 0.0),
+        "air_flow_direction":    getattr(problem, "air_flow_direction", "+x"),
+        "air_flow_T_inf":        getattr(problem, "air_flow_T_inf", 20.0),
+        "air_flow_shape":        getattr(problem, "air_flow_shape", "auto"),
         # Анизотропия глобального материала.
         "is_anisotropic":        getattr(problem, "is_anisotropic", False),
         "lambda_x":              getattr(problem, "lambda_x", 0.0),
@@ -138,6 +144,11 @@ def load_project(path: str) -> Problem:
     # Теплофизические свойства и анизотропия.
     problem.rho            = state.get("rho", 0.0)
     problem.cp             = state.get("cp", 0.0)
+    problem.air_flow_enabled   = state.get("air_flow_enabled", False)
+    problem.air_flow_speed     = state.get("air_flow_speed", 0.0)
+    problem.air_flow_direction = state.get("air_flow_direction", "+x")
+    problem.air_flow_T_inf     = state.get("air_flow_T_inf", 20.0)
+    problem.air_flow_shape     = state.get("air_flow_shape", "auto")
     problem.is_anisotropic = state.get("is_anisotropic", False)
     problem.lambda_x       = state.get("lambda_x", 0.0)
     problem.lambda_y       = state.get("lambda_y", 0.0)

@@ -53,6 +53,8 @@ from .convection import (
     surface_areas, frontal_area, faces_exposed_to_flow, parse_direction,
     characteristic_length, analyze_forced_convection,
     apply_forced_convection_bc,
+    analyze_problem_air_flow, apply_problem_air_flow,
+    convection_summary_text,
 )
 
 __version__ = "1.1.0"
@@ -95,4 +97,6 @@ __all__ = [
     "surface_areas", "frontal_area", "faces_exposed_to_flow", "parse_direction",
     "characteristic_length", "analyze_forced_convection",
     "apply_forced_convection_bc",
+    "analyze_problem_air_flow", "apply_problem_air_flow",
+    "convection_summary_text",
 ]

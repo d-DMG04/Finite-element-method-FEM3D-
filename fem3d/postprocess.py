@@ -372,6 +372,18 @@ def export_report(problem: Problem, path: str) -> None:
         idx, x, y, z = hs
         lines.append(f"  Горячая точка: узел #{idx} в ({x:g}, {y:g}, {z:g})")
     lines.append("")
+
+    # Конвекция при обдуве — все величины (если обдув задан).
+    try:
+        from . import convection as _cv
+        if getattr(problem, "air_flow_enabled", False):
+            lines.append("КОНВЕКЦИЯ ПРИ ОБТЕКАНИИ (ОБДУВ)")
+            for ln in _cv.convection_summary_text(problem).splitlines():
+                lines.append("  " + ln if ln else ln)
+            lines.append("")
+    except Exception:
+        pass
+
     lines.append("=" * 70)
 
     with open(path, "w", encoding="utf-8") as fout:

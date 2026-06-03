@@ -67,7 +67,7 @@ THEME_LIGHT = ThemePalette(
 THEME_SEPIA = ThemePalette(
     name="sepia", title="Бежевая",
     bg="#efe4cf", panel="#f7eed8", input_bg="#fdf6e3",
-    text="#3a2d1a", text_dim="#7a6a4d",
+    text="#3a2d1a", text_dim="#5e4e30",
     border="#c8b896", border_strong="#8a7656",
     accent="#8a5c2a", accent_hover="#a06c30",
     run="#5d7a3a", run_hover="#6d8a48",

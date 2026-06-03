@@ -27,6 +27,22 @@ from typing import Callable, Optional, Tuple
 
 import numpy as np
 
+
+def _padded_clim(tmin: float, tmax: float, use_log: bool = False):
+    """Непустой диапазон цветовой шкалы.
+
+    При однородном поле (tmin≈tmax) диапазон расширяется, иначе подписи
+    легенды схлопываются в одно повторяющееся число и шкала выглядит сломанной.
+    """
+    tmin, tmax = float(tmin), float(tmax)
+    span = tmax - tmin
+    if span >= 1e-6 * max(1.0, abs(tmax)):
+        return tmin, tmax
+    if use_log and tmax > 0:
+        return tmax * 0.99, tmax * 1.01
+    pad = max(0.5, abs(tmax) * 0.01)
+    return tmax - pad, tmax + pad
+
 # -----------------------------------------------------------------------------
 # Доступность PyVista определяется на уровне модуля.
 # -----------------------------------------------------------------------------
@@ -667,6 +683,36 @@ class PyVistaView(Visualization3D):
         except Exception:
             pass
 
+    def _display_clim(self, use_log: bool = False):
+        """Диапазон цветовой шкалы. При однородном поле (Tmin≈Tmax) шкала
+        искусственно расширяется, иначе все подписи схлопываются в одно число
+        и легенда выглядит как баг."""
+        Tmin, Tmax = self._T_range
+        span = Tmax - Tmin
+        if span >= 1e-6 * max(1.0, abs(Tmax)):
+            return (float(Tmin), float(Tmax))
+        # Однородное поле.
+        if use_log and Tmax > 0:
+            return (float(Tmax) * 0.99, float(Tmax) * 1.01)
+        pad = max(0.5, abs(Tmax) * 0.01)
+        return (float(Tmax - pad), float(Tmax + pad))
+
+    def _bar_args(self, use_log: bool = False, title_base: str = "T, °C"):
+        """Аргументы цветовой легенды с явным числом и форматом подписей.
+
+        При однородном поле выводит единственное значение в заголовке, чтобы
+        легенда не повторяла одно и то же число по всей шкале."""
+        title = (title_base + " (log)") if use_log else title_base
+        Tmin, Tmax = self._T_range
+        span = Tmax - Tmin
+        if span < 1e-6 * max(1.0, abs(Tmax)):
+            return {"title": f"{title_base.split(',')[0]} = {Tmax:.2f} °C "
+                             f"(однородное поле)",
+                    "n_labels": 2, "fmt": "%.2f"}
+        # Формат подписей: больше знаков при малом перепаде.
+        fmt = "%.2f" if span < 10.0 else "%.1f"
+        return {"title": title, "n_labels": 5, "fmt": fmt}
+
     def _do_refresh(self) -> None:
         """Основная функция перерисовки сцены."""
         if self._volume_unstructured is None:
@@ -696,7 +742,8 @@ class PyVistaView(Visualization3D):
                     self._surface_mesh, scalars="T", cmap=cmap,
                     show_edges=self._show_edges, render=False,
                     opacity=surf_opacity, log_scale=use_log,
-                    scalar_bar_args={"title": "T, °C (log)" if use_log else "T, °C"})
+                    clim=self._display_clim(use_log),
+                    scalar_bar_args=self._bar_args(use_log))
             else:
                 self._actors["surf"] = self.plotter.add_mesh(
                     self._surface_mesh, color="#7a6cf0", opacity=surf_opacity,
@@ -709,8 +756,8 @@ class PyVistaView(Visualization3D):
                 vol_kwargs = {"scalars": "T", "cmap": cmap,
                               "opacity": "linear", "mapper": "smart",
                               "render": False,
-                              "scalar_bar_args": {"title": "T, °C (log)" if use_log
-                                                   else "T, °C"}}
+                              "clim": self._display_clim(use_log),
+                              "scalar_bar_args": self._bar_args(use_log)}
                 # log_scale в add_volume поддерживается не во всех версиях PyVista,
                 # но есть resolution-параметр; пробуем безопасно.
                 try:
@@ -744,11 +791,19 @@ class PyVistaView(Visualization3D):
                     self._actors["iso"] = self.plotter.add_mesh(
                         iso, scalars="T", cmap=cmap, opacity=0.85,
                         render=False, log_scale=use_log,
-                        scalar_bar_args={"title": "T, °C (log)" if use_log
-                                          else "T, °C"})
-                self._actors["shell"] = self.plotter.add_mesh(
-                    self._surface_mesh, color="#5a606b", opacity=0.12,
-                    render=False)
+                        clim=self._display_clim(use_log),
+                        scalar_bar_args=self._bar_args(use_log))
+                    self._actors["shell"] = self.plotter.add_mesh(
+                        self._surface_mesh, color="#5a606b", opacity=0.12,
+                        render=False)
+                else:
+                    # Однородное поле — изоповерхности построить нельзя.
+                    # Красим поверхность по T, чтобы легенда осталась осмысленной.
+                    self._actors["surf"] = self.plotter.add_mesh(
+                        self._surface_mesh, scalars="T", cmap=cmap,
+                        opacity=1.0, render=False,
+                        clim=self._display_clim(use_log),
+                        scalar_bar_args=self._bar_args(use_log))
             else:
                 self._actors["shell"] = self.plotter.add_mesh(
                     self._surface_mesh, color="#7a6cf0", opacity=0.35,
@@ -772,8 +827,8 @@ class PyVistaView(Visualization3D):
                     self._actors["slice"] = self.plotter.add_mesh(
                         sliced, scalars="T", cmap=cmap, render=False,
                         log_scale=use_log,
-                        scalar_bar_args={"title": "T, °C (log)" if use_log
-                                          else "T, °C"})
+                        clim=self._display_clim(use_log),
+                        scalar_bar_args=self._bar_args(use_log))
             except Exception:
                 pass
 
@@ -1267,11 +1322,13 @@ class MatplotlibView(Visualization3D):
                 T_face = self._T[bnd].mean(axis=1)
                 # Логарифмическая шкала если возможно (Tmin > 0).
                 Tmin_v, Tmax_v = float(self._T.min()), float(self._T.max())
+                _lo, _hi = _padded_clim(Tmin_v, Tmax_v,
+                                        self._log_scale and Tmin_v > 0.0)
                 if self._log_scale and Tmin_v > 0.0:
-                    norm = matplotlib.colors.LogNorm(vmin=Tmin_v, vmax=Tmax_v)
+                    norm = matplotlib.colors.LogNorm(vmin=_lo, vmax=_hi)
                     cbar_label = "T, °C (log)"
                 else:
-                    norm = matplotlib.colors.Normalize(vmin=Tmin_v, vmax=Tmax_v)
+                    norm = matplotlib.colors.Normalize(vmin=_lo, vmax=_hi)
                     cbar_label = "T, °C"
                 cmap = matplotlib.cm.get_cmap(self._cmap)
                 colors = cmap(norm(T_face))
@@ -1291,11 +1348,13 @@ class MatplotlibView(Visualization3D):
             if has_T and self._sample_indices is not None:
                 sample = self._sample_indices
                 Tmin_v, Tmax_v = float(self._T.min()), float(self._T.max())
+                _lo, _hi = _padded_clim(Tmin_v, Tmax_v,
+                                        self._log_scale and Tmin_v > 0.0)
                 if self._log_scale and Tmin_v > 0.0:
-                    norm = matplotlib.colors.LogNorm(vmin=Tmin_v, vmax=Tmax_v)
+                    norm = matplotlib.colors.LogNorm(vmin=_lo, vmax=_hi)
                     cbar_label = "T, °C (log)"
                 else:
-                    norm = matplotlib.colors.Normalize(vmin=Tmin_v, vmax=Tmax_v)
+                    norm = matplotlib.colors.Normalize(vmin=_lo, vmax=_hi)
                     cbar_label = "T, °C"
                 cmap = matplotlib.cm.get_cmap(self._cmap)
                 self._scatter = self.ax.scatter(

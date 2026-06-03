@@ -1368,6 +1368,9 @@ class BoundaryConditionsDialog(QDialog):
         top.addWidget(self.template_combo, 1)
         outer.addLayout(top)
 
+        # ---- Обдув основной фигуры потоком воздуха ----
+        outer.addWidget(self._build_air_flow_group())
+
         # ---- Список карточек граней ----
         from PyQt5.QtWidgets import QScrollArea, QStackedWidget
         scroll = QScrollArea()
@@ -1527,6 +1530,115 @@ class BoundaryConditionsDialog(QDialog):
             "eps": sp_eps, "tenv": sp_tenv, "preset": preset_combo,
         }
         return card
+
+    def _build_air_flow_group(self):
+        """Группа обдува: скорость+направление потока → h на все грани фигуры.
+
+        Характерный размер и площадь берутся из РЕАЛЬНОЙ геометрии фигуры,
+        поэтому условие применяется именно к основному телу, а не к
+        абстрактной форме."""
+        from PyQt5.QtWidgets import QGroupBox
+        box = QGroupBox("Обдув фигуры потоком воздуха (вынужденная конвекция)")
+        lay = QVBoxLayout(box)
+
+        self.flow_enable = QCheckBox(
+            "Задавать конвекцию на гранях через обдув (а не вручную α)")
+        self.flow_enable.setChecked(
+            bool(getattr(self._problem, "air_flow_enabled", False)))
+        lay.addWidget(self.flow_enable)
+
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Скорость U:"))
+        self.flow_speed = QDoubleSpinBox()
+        self.flow_speed.setRange(0.0, 500.0); self.flow_speed.setDecimals(2)
+        self.flow_speed.setSuffix(" м/с")
+        self.flow_speed.setValue(float(getattr(self._problem,
+                                               "air_flow_speed", 0.0)) or 5.0)
+        row.addWidget(self.flow_speed)
+
+        row.addWidget(QLabel("Направление:"))
+        self.flow_dir = QComboBox()
+        self._flow_dirs = [("+X", "+x"), ("−X", "-x"), ("+Y", "+y"),
+                           ("−Y", "-y"), ("+Z", "+z"), ("−Z", "-z")]
+        for label, _ in self._flow_dirs:
+            self.flow_dir.addItem(label)
+        cur_dir = getattr(self._problem, "air_flow_direction", "+x")
+        for i, (_, code) in enumerate(self._flow_dirs):
+            if code == cur_dir:
+                self.flow_dir.setCurrentIndex(i)
+        row.addWidget(self.flow_dir)
+
+        row.addWidget(QLabel("T∞:"))
+        self.flow_tinf = QDoubleSpinBox()
+        self.flow_tinf.setRange(-273.0, 2000.0); self.flow_tinf.setDecimals(1)
+        self.flow_tinf.setSuffix(" °C")
+        self.flow_tinf.setValue(float(getattr(self._problem,
+                                              "air_flow_T_inf", 20.0)))
+        row.addWidget(self.flow_tinf)
+        lay.addLayout(row)
+
+        btn_row = QHBoxLayout()
+        self.flow_apply_btn = QPushButton("Рассчитать h и применить ко всем граням")
+        self.flow_apply_btn.clicked.connect(self._on_apply_air_flow)
+        btn_row.addWidget(self.flow_apply_btn)
+        btn_row.addStretch(1)
+        lay.addLayout(btn_row)
+
+        self.flow_result = QLabel(
+            "Введите скорость и нажмите «Рассчитать h…». "
+            "Re, Nu и h считаются по размерам самой фигуры.")
+        self.flow_result.setWordWrap(True)
+        self.flow_result.setStyleSheet("color:#9aa0a6; font-size: 9pt;")
+        lay.addWidget(self.flow_result)
+        return box
+
+    def _on_apply_air_flow(self):
+        """Посчитать h по обдуву и проставить конвекцию на все грани."""
+        from fem3d import convection as cv
+        if self._problem.nodes is None:
+            self.flow_result.setText("Сначала постройте сетку фигуры.")
+            return
+        # Временно записываем параметры обдува в задачу для расчёта по фигуре.
+        speed = float(self.flow_speed.value())
+        direction = self._flow_dirs[self.flow_dir.currentIndex()][1]
+        T_inf = float(self.flow_tinf.value())
+        self._problem.air_flow_enabled = True
+        self._problem.air_flow_speed = speed
+        self._problem.air_flow_direction = direction
+        self._problem.air_flow_T_inf = T_inf
+        T_surface = (float(self._problem.T.mean())
+                     if getattr(self._problem, "T", None) is not None
+                     and self._problem.T.size else None)
+        try:
+            res = cv.analyze_problem_air_flow(self._problem, T_surface=T_surface)
+        except Exception as exc:
+            self.flow_result.setText(f"Ошибка: {exc}")
+            return
+        if res is None:
+            self.flow_result.setText("Задайте скорость > 0.")
+            return
+        # Проставляем конвекцию α=h, T∞ на все грани (в виджеты).
+        idx_conv = list(self.BC_KIND_INFO.keys()).index(self.BC_KIND_CONVECTION)
+        for fid in range(6):
+            w = self._face_widgets[fid]
+            w["kind"].setCurrentIndex(idx_conv)
+            w["alpha"].setValue(res.h)
+            w["tinf"].setValue(T_inf)
+        self.flow_enable.setChecked(True)
+        self.flow_result.setText(
+            f"Re = {res.Re:.3g},  Nu = {res.Nu:.1f},  "
+            f"h = {res.h:.2f} Вт/(м²·К)  ({res.regime}).  "
+            f"Назначено на все 6 граней. A_полн = {res.total_area:.4g} м², "
+            f"Q ≈ {res.Q_total:.4g} Вт.")
+
+    def air_flow_result(self) -> dict:
+        """Параметры обдува для сохранения в задачу (читается вызывающим кодом)."""
+        return {
+            "enabled": bool(self.flow_enable.isChecked()),
+            "speed": float(self.flow_speed.value()),
+            "direction": self._flow_dirs[self.flow_dir.currentIndex()][1],
+            "T_inf": float(self.flow_tinf.value()),
+        }
 
     def _bc_to_kind(self, bc) -> str:
         from fem3d import (BC_NONE, BC_DIRICHLET, BC_NEUMANN, BC_ROBIN,

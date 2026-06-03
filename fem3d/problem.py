@@ -69,6 +69,20 @@ class BoundaryCondition:
                  BC_RADIATION: "Излучение"}
         return names.get(self.type, "—")
 
+    def short_description(self) -> str:
+        """Компактное описание для узких карточек граней (без обрезки)."""
+        if self.type == BC_DIRICHLET:
+            return f"T = {self.T0:g} °C"
+        if self.type == BC_NEUMANN:
+            if abs(self.q0) < 1e-15:
+                return "Изоляция"
+            return f"q = {self.q0:+g} Вт/м²"
+        if self.type == BC_ROBIN:
+            return f"Конвекция α={self.alpha:.1f}, T∞={self.T_inf:g}°C"
+        if self.type == BC_RADIATION:
+            return f"Излучение ε={self.emissivity:g}, T={self.T_inf:g}°C"
+        return "Не задано"
+
 
 # Пресеты конвекции — типичные α для разных условий охлаждения.
 # Источник: Incropera, Fundamentals of Heat and Mass Transfer, Table 1.1.
@@ -456,6 +470,16 @@ class Problem:
     # --- Теплофизические свойства для нестационарной задачи ----------------
     rho: float = 0.0   # плотность кг/м³ (0 = не задано, дефолт 1000)
     cp:  float = 0.0   # удельная теплоёмкость Дж/(кг·К)
+
+    # --- Обдув основной фигуры потоком воздуха (вынужденная конвекция) ------
+    # Если включено, конвекция на гранях задаётся не вручную, а через
+    # параметры набегающего потока: h вычисляется из Re→Nu для РЕАЛЬНОЙ
+    # геометрии (характерный размер и площадь берутся из самой фигуры).
+    air_flow_enabled: bool = False
+    air_flow_speed: float = 0.0          # скорость потока U, м/с
+    air_flow_direction: str = "+x"       # направление: '+x'/'-x'/'+y'/...
+    air_flow_T_inf: float = 20.0         # температура воздуха, °C
+    air_flow_shape: str = "auto"         # 'auto' → по реальной фигуре
 
     # --- Глобальная анизотропия материала (λ разный по осям X/Y/Z) ---------
     is_anisotropic: bool = False

@@ -131,9 +131,14 @@ class ListSummaryCard(QFrame):
         outer.setContentsMargins(8, 6, 8, 6)
         outer.setSpacing(2)
 
-        head = QHBoxLayout()
+        # Заголовок отдельной строкой — иначе в узкой панели длинный заголовок
+        # («Регионы материалов») и две кнопки не помещаются и накладываются.
         self.title_label = QLabel(f"<b>{title}</b>")
-        head.addWidget(self.title_label, 1)
+        outer.addWidget(self.title_label)
+
+        head = QHBoxLayout()
+        head.setSpacing(4)
+        head.addStretch(1)
         self.btn_edit = QPushButton("Изменить...")
         self.btn_edit.setMaximumWidth(110)
         self.btn_edit.clicked.connect(on_edit)
@@ -176,9 +181,12 @@ class SourcesCard(QFrame):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(8, 6, 8, 6); outer.setSpacing(2)
 
-        head = QHBoxLayout()
         self.title_label = QLabel("<b>Локальные источники</b>")
-        head.addWidget(self.title_label, 1)
+        outer.addWidget(self.title_label)
+
+        head = QHBoxLayout()
+        head.setSpacing(4)
+        head.addStretch(1)
         self.btn_edit = QPushButton("Список...")
         self.btn_edit.setMaximumWidth(95)
         self.btn_edit.clicked.connect(on_edit)
@@ -256,8 +264,9 @@ class FaceChip(QPushButton):
     def _refresh(self) -> None:
         from gui.theme import bc_colors
         color = bc_colors().get(self.bc.type, "#3c4049")
-        # Текст на двух строках: имя + краткое описание.
-        self.setText(f"{FACE_NAMES[self.face_id]}\n{self.bc.description()}")
+        # Текст на двух строках: имя + краткое описание (без обрезки).
+        self.setText(f"{FACE_NAMES[self.face_id]}\n{self.bc.short_description()}")
+        self.setToolTip(self.bc.description())
         self.setStyleSheet(
             f"QPushButton#Chip {{"
             f"  background-color: {current_theme().input_bg};"
@@ -628,7 +637,7 @@ class MainWindow(QMainWindow):
     # ---- Левая панель ------------------------------------------------------
     def _build_left_panel(self) -> QWidget:
         panel = QFrame(); panel.setObjectName("Panel")
-        panel.setMinimumWidth(280); panel.setMaximumWidth(380)
+        panel.setMinimumWidth(300); panel.setMaximumWidth(400)
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(10, 10, 10, 10); layout.setSpacing(8)
 
@@ -638,6 +647,11 @@ class MainWindow(QMainWindow):
         # Вкладки группируют настройки модели, чтобы не перегружать панель.
         model_tabs = QTabWidget()
         model_tabs.setObjectName("ModelTabs")
+        # Растягиваем вкладки на всю ширину и не обрезаем подписи
+        # («Источники» переставала помещаться и обрезалась до «Источни…»).
+        model_tabs.tabBar().setExpanding(True)
+        model_tabs.setElideMode(Qt.ElideNone)
+        model_tabs.setUsesScrollButtons(False)
 
         # --- Вкладка «Геометрия» ---
         geo_tab = QWidget(); geo_l = QVBoxLayout(geo_tab)
@@ -870,7 +884,7 @@ class MainWindow(QMainWindow):
     # ---- Правая панель: чипы граней -----------------------------------------
     def _build_right_panel(self) -> QWidget:
         panel = QFrame(); panel.setObjectName("Panel")
-        panel.setMinimumWidth(280); panel.setMaximumWidth(380)
+        panel.setMinimumWidth(300); panel.setMaximumWidth(400)
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(10, 10, 10, 10); layout.setSpacing(8)
 
@@ -944,6 +958,10 @@ class MainWindow(QMainWindow):
 
         self.result_label = QLabel("Готов к расчёту")
         self.result_label.setAlignment(Qt.AlignCenter)
+        # Моноширинный шрифт: числа (T, невязка, время) выровнены и не «прыгают».
+        self.result_label.setStyleSheet(
+            'font-family: "Cascadia Mono", "Consolas", "DejaVu Sans Mono", '
+            '"Courier New", monospace; font-size: 9pt;')
         layout.addWidget(self.result_label, 2)
 
         self.btn_vtu = QPushButton("VTU"); self.btn_vtu.setEnabled(False)
@@ -1246,6 +1264,12 @@ class MainWindow(QMainWindow):
         dlg = BoundaryConditionsDialog(self.problem, self)
         if dlg.exec_() == QDialog.Accepted:
             self.problem.bcs = dlg.result_bcs()
+            # Сохраняем параметры обдува в задачу (для вывода и сохранения).
+            flow = dlg.air_flow_result()
+            self.problem.air_flow_enabled = flow["enabled"]
+            self.problem.air_flow_speed = flow["speed"]
+            self.problem.air_flow_direction = flow["direction"]
+            self.problem.air_flow_T_inf = flow["T_inf"]
             self._sync_summaries()
             self._refresh_bc_overlay()
 
@@ -1495,6 +1519,12 @@ class MainWindow(QMainWindow):
                     self.problem, speed=p["speed"], direction=p["direction"],
                     shape=p["shape"], T_inf=p["T_inf"],
                     T_surface=p["T_surface"], orient_weighting=p["orient"])
+                # Сохраняем параметры обдува в саму задачу (для вывода/отчёта).
+                self.problem.air_flow_enabled = True
+                self.problem.air_flow_speed = p["speed"]
+                self.problem.air_flow_direction = p["direction"]
+                self.problem.air_flow_T_inf = p["T_inf"]
+                self.problem.air_flow_shape = p["shape"]
                 # Обновляем подсветку ГУ и карточки граней.
                 self._refresh_view_from_problem(rebuild_geometry=False)
                 if hasattr(self, "_sync_summaries"):
@@ -1513,45 +1543,14 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Ошибка", str(exc))
 
     def _on_surface_and_nusselt(self) -> None:
-        """Показать площадь поверхности и число Нуссельта на гранях с конвекцией."""
+        """Полный вывод величин конвекции: обдув, Re/Nu/h, площади, Q, Bi."""
         if self.problem.nodes is None:
             QMessageBox.information(self, "Нет сетки",
                                     "Сначала постройте сетку.")
             return
         from fem3d import convection as cv
-        from fem3d.postprocess import compute_nusselt
-        from fem3d.core_bridge import BC_ROBIN
-        areas = cv.surface_areas(self.problem)
-        lines = ["Площадь поверхности фигуры:"]
-        for fid, area in areas["per_face"].items():
-            lines.append(f"  грань {areas['labels'][fid]:>3}: {area:.5g} м²")
-        lines.append(f"  ИТОГО: {areas['total']:.5g} м²")
-
-        # Число Нуссельта на гранях с конвекцией (если есть результат расчёта).
-        if (getattr(self.problem, "T", None) is not None
-                and self.problem.T.size
-                and getattr(self.problem, "flux", None) is not None):
-            air = cv.air_properties(float(self.problem.T.mean()))
-            lines.append("\nЧисло Нуссельта (λ воздуха) на гранях с конвекцией:")
-            any_robin = False
-            for fid in range(6):
-                bc = self.problem.bcs.get(fid)
-                if bc is None or bc.type != BC_ROBIN:
-                    continue
-                any_robin = True
-                nu = compute_nusselt(self.problem, fid, fluid_lambda=air.k)
-                if "Nu" in nu:
-                    lines.append(
-                        f"  {areas['labels'][fid]:>3}: Nu={nu['Nu']:.1f}, "
-                        f"h={nu['h_actual']:.2f} Вт/(м²·К), "
-                        f"Bi={nu['Bi']:.3g}")
-            if not any_robin:
-                lines.append("  (нет граней с конвекцией)")
-        else:
-            lines.append("\nДля числа Нуссельта сначала выполните расчёт.")
-
-        QMessageBox.information(self, "Площадь и число Нуссельта",
-                                "\n".join(lines))
+        QMessageBox.information(self, "Конвекция: все величины",
+                                cv.convection_summary_text(self.problem))
 
     def _on_add_observation_point(self) -> None:
         """Включить режим установки точки наблюдения кликом в 3D."""
@@ -1798,13 +1797,34 @@ class MainWindow(QMainWindow):
         # Передаём поле потоков в 3D-вид (для стрелок, если включены).
         self.viz.set_flux_field(self.problem.flux)
         Tmin, Tmax = self.problem.temperature_range()
-        self.result_label.setText(
-            f"Tmin = {Tmin:.2f}°C   Tmax = {Tmax:.2f}°C   "
+        Tmean = float(self.problem.T.mean()) if self.problem.T is not None else 0.0
+        status = (
+            f"T = {Tmin:.2f}…{Tmax:.2f}°C   "
+            f"среднее {Tmean:.2f}°C   перепад {Tmax - Tmin:.2f}°C   "
             f"итераций: {info.iterations}   "
             f"невязка: {info.residual:.2e}   "
             f"время: {info.time_seconds*1000:.1f} мс   "
             f"{'сошёлся' if info.converged else 'НЕ сошёлся'}"
         )
+        # Энергобаланс — если посчитается без ошибок (диагностика качества).
+        try:
+            bal = self.problem.energy_balance()
+            if bal and "rel_err" in bal:
+                status += f"   энергобаланс: {bal['rel_err']*100:.2f}%"
+        except Exception:
+            pass
+        # Величины конвекции при обдуве — выводим прямо в статус.
+        try:
+            if getattr(self.problem, "air_flow_enabled", False):
+                from fem3d import convection as cv
+                res = cv.analyze_problem_air_flow(self.problem, T_surface=Tmean)
+                if res is not None:
+                    status += (f"   ·   обдув: Re={res.Re:.2g}, "
+                               f"Nu={res.Nu:.0f}, h={res.h:.1f} Вт/(м²·К), "
+                               f"Q={res.Q_total:.0f} Вт")
+        except Exception:
+            pass
+        self.result_label.setText(status)
         self.btn_vtu.setEnabled(True); self.btn_csv.setEnabled(True); self.btn_report.setEnabled(True)
         if self.settings.auto_save_calculation:
             self.calc_view.add_record(
