@@ -100,6 +100,41 @@ CONVECTION_PRESETS = [
 
 
 # =============================================================================
+# Частичное погружение детали в жидкость (экспериментальная методика ПЗ).
+# =============================================================================
+
+@dataclass
+class Immersion:
+    """Частичное погружение детали в жидкость.
+
+    Нижний (или верхний) конец детали опущен в воду. Линия воды режет боковые
+    стенки, поэтому смоченный поясок (торец + нижние полоски стенок) выделяется
+    геометрически по координате вдоль оси погружения и получает СОБСТВЕННОЕ ГУ
+    (wetted_bc): обычно Дирихле T = 100 °C (кипящая вода, поверхность ≈ T воды)
+    или Робин (h_воды, T_воды). Открытая часть теряет тепло конвекцией в воздух.
+
+    Поля:
+      axis  — ось погружения: 0=X, 1=Y, 2=Z (обычно Z — вертикаль);
+      level — координата линии воды вдоль axis, м;
+      side  — 0: в воде НИЖНИЙ конец (coord < level);
+              1: в воде ВЕРХНИЙ конец (coord > level);
+      wetted_bc — ГУ на смоченном пояске (Дирихле или Робин).
+    """
+    enabled: bool = False
+    axis: int = 2
+    level: float = 0.05
+    side: int = 0
+    wetted_bc: BoundaryCondition = field(
+        default_factory=lambda: BoundaryCondition(type=BC_DIRICHLET, T0=100.0))
+
+    def description(self) -> str:
+        from .immersion import AXIS_NAMES, SIDE_NAMES
+        return (f"Погружение по {AXIS_NAMES[self.axis]}, линия воды "
+                f"{self.level:g} м ({SIDE_NAMES[self.side]}); "
+                f"смочено: {self.wetted_bc.description()}")
+
+
+# =============================================================================
 # Локальные источники тепла (раздел 3.3.11 ПЗ).
 # =============================================================================
 
@@ -518,6 +553,15 @@ class Problem:
     external_bnd_nodes: Optional[np.ndarray] = None
     external_bnd_face_ids: Optional[np.ndarray] = None
 
+    # --- Частичное погружение в жидкость (экспериментальная методика ПЗ) ----
+    # Если задано и enabled — перед расчётом смоченные фасетки перебиваются на
+    # id погружённого торца, а на этот id вешается wetted_bc. См. fem3d.immersion.
+    immersion: Optional[Immersion] = None
+    # Служебное: id грани смоченного пояска для текущего расчёта (ставится в
+    # build_mesh_in_core, читается в push_to_core). Не сериализуется.
+    _immersion_wetted_id: Optional[int] = field(default=None, repr=False,
+                                                 compare=False)
+
     # --- Результаты расчёта (заполняются после solve) -----------------------
     nodes: Optional[np.ndarray] = None        # (N, 3)
     elements: Optional[np.ndarray] = None     # (Ne, 4)
@@ -533,6 +577,15 @@ class Problem:
         return self.external_nodes is not None and self.external_elements is not None
 
     def build_mesh_in_core(self, bridge: CoreBridge) -> None:
+        self._immersion_wetted_id = None
+
+        # --- Частичное погружение: перебиваем face_id смоченных фасеток. -----
+        if self.immersion is not None and self.immersion.enabled:
+            self._build_immersed_mesh_in_core(bridge)
+            self.nodes = bridge.get_nodes()
+            self.elements = bridge.get_elements()
+            return
+
         if self.has_external_mesh():
             bridge.load_mesh(
                 self.external_nodes,
@@ -550,6 +603,39 @@ class Problem:
                 0.0, g.Lx, 0.0, g.Ly, 0.0, g.Lz, g.nx, g.ny, g.nz)
         self.nodes = bridge.get_nodes()
         self.elements = bridge.get_elements()
+
+    def _build_immersed_mesh_in_core(self, bridge: CoreBridge) -> None:
+        """Построить сетку с учётом линии воды и загрузить в ядро.
+
+        Берёт базовую сетку (внешнюю либо коробку, построенную в Python),
+        перебивает face_id смоченных фасеток на id погружённого торца и
+        запоминает этот id в self._immersion_wetted_id для push_to_core.
+        """
+        from .immersion import split_boundary_by_waterline, make_box_mesh
+
+        if self.has_external_mesh():
+            nodes = self.external_nodes
+            elements = self.external_elements
+            bnd_nodes = self.external_bnd_nodes
+            bnd_face_ids = self.external_bnd_face_ids
+        else:
+            g = self.geometry
+            nodes, elements, bnd_nodes, bnd_face_ids = make_box_mesh(
+                g.Lx, g.Ly, g.Lz, g.nx, g.ny, g.nz)
+
+        new_face_ids, wetted_id, _n_wet = split_boundary_by_waterline(
+            nodes, bnd_nodes, bnd_face_ids,
+            axis=self.immersion.axis,
+            level=self.immersion.level,
+            side=self.immersion.side,
+        )
+        self._immersion_wetted_id = wetted_id
+        bridge.load_mesh(
+            np.ascontiguousarray(nodes, dtype=np.float64),
+            np.ascontiguousarray(elements, dtype=np.int32),
+            np.ascontiguousarray(bnd_nodes, dtype=np.int32),
+            np.ascontiguousarray(new_face_ids, dtype=np.int32),
+        )
 
     def push_to_core(self, bridge: CoreBridge,
                       T_estimate: Optional[np.ndarray] = None) -> None:
@@ -602,6 +688,12 @@ class Problem:
 
         for face_id in range(6):
             bc = self.bcs[face_id]
+            # Частичное погружение: на грани смоченного пояска ставим ГУ воды
+            # (Дирихле T_воды или Робин h+T_воды), не трогая исходный self.bcs.
+            if (self._immersion_wetted_id is not None
+                    and self.immersion is not None
+                    and face_id == self._immersion_wetted_id):
+                bc = self.immersion.wetted_bc
             if bc.type == _BRD:
                 # Линеаризация радиации: ε σ (T⁴−T_ext⁴) = α_rad·(T_s−T_ext),
                 # где α_rad = ε σ (T_s+T_ext)(T_s²+T_ext²).  T в Кельвинах.

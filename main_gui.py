@@ -1270,6 +1270,8 @@ class MainWindow(QMainWindow):
             self.problem.air_flow_speed = flow["speed"]
             self.problem.air_flow_direction = flow["direction"]
             self.problem.air_flow_T_inf = flow["T_inf"]
+            # Частичное погружение в жидкость.
+            self.problem.immersion = dlg.immersion_result()
             self._sync_summaries()
             self._refresh_bc_overlay()
 

@@ -63,6 +63,8 @@ def save_project(problem: Problem, path: str,
         "observation_points":    list(getattr(problem, "observation_points", [])),
         # Импортированную сетку сохраняем как массивы (см. ниже).
         "has_external_mesh":     problem.has_external_mesh(),
+        # Частичное погружение в жидкость.
+        "immersion":             getattr(problem, "immersion", None),
     }
 
     arrays = {}
@@ -155,6 +157,9 @@ def load_project(path: str) -> Problem:
     problem.lambda_z       = state.get("lambda_z", 0.0)
     problem.material_name  = state.get("material_name", "")
     problem.observation_points = state.get("observation_points", [])
+
+    # Частичное погружение в жидкость.
+    problem.immersion = state.get("immersion", None)
 
     # Импортированная сетка.
     if state.get("has_external_mesh", False):

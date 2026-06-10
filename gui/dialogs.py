@@ -1371,6 +1371,9 @@ class BoundaryConditionsDialog(QDialog):
         # ---- Обдув основной фигуры потоком воздуха ----
         outer.addWidget(self._build_air_flow_group())
 
+        # ---- Частичное погружение в жидкость ----
+        outer.addWidget(self._build_immersion_group())
+
         # ---- Список карточек граней ----
         from PyQt5.QtWidgets import QScrollArea, QStackedWidget
         scroll = QScrollArea()
@@ -1639,6 +1642,111 @@ class BoundaryConditionsDialog(QDialog):
             "direction": self._flow_dirs[self.flow_dir.currentIndex()][1],
             "T_inf": float(self.flow_tinf.value()),
         }
+
+    # ---- Частичное погружение в жидкость -----------------------------------
+    def _build_immersion_group(self):
+        """Группа «Погружение»: деталь частично опущена в воду.
+
+        Смоченный поясок (торец + нижние полоски стенок ниже линии воды)
+        получает отдельное ГУ — Дирихле T_воды (кипяток) или Робин h+T_воды.
+        Открытая часть теряет тепло через ГУ, заданные на гранях выше."""
+        from PyQt5.QtWidgets import QGroupBox
+        from fem3d import BC_DIRICHLET, BC_ROBIN
+        imm = getattr(self._problem, "immersion", None)
+
+        box = QGroupBox("Частичное погружение детали в жидкость")
+        lay = QVBoxLayout(box)
+
+        self.imm_enable = QCheckBox(
+            "Деталь частично погружена в жидкость (нижний конец в воде)")
+        self.imm_enable.setChecked(bool(imm.enabled) if imm else False)
+        lay.addWidget(self.imm_enable)
+
+        row1 = QHBoxLayout()
+        row1.addWidget(QLabel("Ось погружения:"))
+        self.imm_axis = QComboBox()
+        for label, code in [("X", 0), ("Y", 1), ("Z (вертикаль)", 2)]:
+            self.imm_axis.addItem(label, code)
+        self.imm_axis.setCurrentIndex(imm.axis if imm else 2)
+        row1.addWidget(self.imm_axis)
+
+        row1.addWidget(QLabel("В воде:"))
+        self.imm_side = QComboBox()
+        for label, code in [("нижний конец", 0), ("верхний конец", 1)]:
+            self.imm_side.addItem(label, code)
+        self.imm_side.setCurrentIndex(imm.side if imm else 0)
+        row1.addWidget(self.imm_side)
+
+        row1.addWidget(QLabel("Линия воды:"))
+        self.imm_level = QDoubleSpinBox()
+        self.imm_level.setRange(0.0, 100.0); self.imm_level.setDecimals(4)
+        self.imm_level.setSingleStep(0.005); self.imm_level.setSuffix(" м")
+        self.imm_level.setValue(float(imm.level) if imm else 0.05)
+        row1.addWidget(self.imm_level)
+        lay.addLayout(row1)
+
+        row2 = QHBoxLayout()
+        row2.addWidget(QLabel("Смоченный поясок:"))
+        self.imm_kind = QComboBox()
+        self.imm_kind.addItem("Дирихле T (кипяток, рекоменд.)", "dirichlet")
+        self.imm_kind.addItem("Робин: h + T воды", "robin")
+        wb = imm.wetted_bc if imm else None
+        self.imm_kind.setCurrentIndex(
+            1 if (wb is not None and wb.type == BC_ROBIN) else 0)
+        row2.addWidget(self.imm_kind)
+
+        row2.addWidget(QLabel("T воды:"))
+        self.imm_twater = QDoubleSpinBox()
+        self.imm_twater.setRange(-273.0, 2000.0); self.imm_twater.setDecimals(1)
+        self.imm_twater.setSuffix(" °C")
+        self.imm_twater.setValue(
+            float(wb.T0) if (wb and wb.type == BC_DIRICHLET)
+            else (float(wb.T_inf) if wb else 100.0))
+        row2.addWidget(self.imm_twater)
+
+        row2.addWidget(QLabel("h воды:"))
+        self.imm_hwater = QDoubleSpinBox()
+        self.imm_hwater.setRange(0.0, 1e6); self.imm_hwater.setDecimals(0)
+        self.imm_hwater.setSuffix(" Вт/(м²·К)")
+        self.imm_hwater.setValue(
+            float(wb.alpha) if (wb and wb.type == BC_ROBIN and wb.alpha > 0)
+            else 10000.0)
+        row2.addWidget(self.imm_hwater)
+        lay.addLayout(row2)
+
+        hint = QLabel(
+            "Линия воды режет стенки: фасетки ниже неё получают ГУ воды, выше — "
+            "ГУ, заданные на гранях. Кипяток ⇒ поверхность ≈ T воды, поэтому "
+            "Дирихле обоснован. h воды важен только для некипящей ванны.")
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color:#9aa0a6; font-size: 9pt;")
+        lay.addWidget(hint)
+
+        def _sync_kind():
+            is_robin = self.imm_kind.currentData() == "robin"
+            self.imm_hwater.setEnabled(is_robin)
+        self.imm_kind.currentIndexChanged.connect(lambda _i: _sync_kind())
+        _sync_kind()
+        return box
+
+    def immersion_result(self):
+        """Объект Immersion для записи в задачу (читается вызывающим кодом)."""
+        from fem3d import BC_DIRICHLET, BC_ROBIN
+        from fem3d.problem import Immersion, BoundaryCondition
+        if self.imm_kind.currentData() == "robin":
+            wetted = BoundaryCondition(type=BC_ROBIN,
+                                       alpha=float(self.imm_hwater.value()),
+                                       T_inf=float(self.imm_twater.value()))
+        else:
+            wetted = BoundaryCondition(type=BC_DIRICHLET,
+                                       T0=float(self.imm_twater.value()))
+        return Immersion(
+            enabled=bool(self.imm_enable.isChecked()),
+            axis=int(self.imm_axis.currentData()),
+            level=float(self.imm_level.value()),
+            side=int(self.imm_side.currentData()),
+            wetted_bc=wetted,
+        )
 
     def _bc_to_kind(self, bc) -> str:
         from fem3d import (BC_NONE, BC_DIRICHLET, BC_NEUMANN, BC_ROBIN,

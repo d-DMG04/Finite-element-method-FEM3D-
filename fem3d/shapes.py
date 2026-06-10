@@ -845,14 +845,17 @@ def make_t_profile(width: float = 0.10, height: float = 0.10,
 # U-образный канал.
 # =============================================================================
 
-def make_u_channel(outer_width: float = 0.08, outer_height: float = 0.06,
-                    thickness: float = 0.012,
-                    length: float = 0.10,
+def make_u_channel(outer_width: float = 0.07, outer_height: float = 0.04,
+                    thickness: float = 0.005,
+                    length: float = 0.47,
                     n_thickness: int = 3,
-                    n_length: int = 10):
-    """П-образный (U) канал: дно + две стенки."""
+                    n_length: int = 47):
+    """П-образный (U) канал: дно + две стенки.
+    Размеры по умолчанию: ширина 7см, высота 4см, толщина 0.5см, длина 47см.
+    """
     coords = []; tets = []
     base = 0
+    
     # Дно: полная ширина, нижние n_thickness слоёв.
     nx = max(8, int(outer_width / thickness * 1.5))
     nz_bottom = n_thickness
@@ -861,6 +864,7 @@ def make_u_channel(outer_width: float = 0.08, outer_height: float = 0.06,
     tets_b = _kuhn_tets(nx, nz_bottom, n_length, nodes_b.shape[0])
     coords.append(nodes_b); tets.append(tets_b + base)
     base += nodes_b.shape[0]
+    
     # Левая стенка.
     nx_w = n_thickness
     nz_w = max(4, int((outer_height - thickness) / thickness * 1.5))
@@ -869,12 +873,14 @@ def make_u_channel(outer_width: float = 0.08, outer_height: float = 0.06,
     tets_l = _kuhn_tets(nx_w, nz_w, n_length, nodes_l.shape[0])
     coords.append(nodes_l); tets.append(tets_l + base)
     base += nodes_l.shape[0]
+    
     # Правая стенка.
     nodes_r = _grid3d(outer_width - thickness, outer_width,
                        thickness, outer_height, 0, length,
                        nx_w + 1, nz_w + 1, n_length + 1)
     tets_r = _kuhn_tets(nx_w, nz_w, n_length, nodes_r.shape[0])
     coords.append(nodes_r); tets.append(tets_r + base)
+    
     nodes = np.vstack(coords); tets = np.vstack(tets)
     return _compact_unused_nodes(nodes, tets.astype(np.int32))
 

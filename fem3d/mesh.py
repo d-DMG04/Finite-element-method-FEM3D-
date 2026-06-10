@@ -163,9 +163,9 @@ def _make_t_profile_preset(density: float = 1.0):
 
 def _make_u_channel_preset(density: float = 1.0):
     from .shapes import make_u_channel
-    return make_u_channel(outer_width=0.08, outer_height=0.06,
-                           thickness=0.012, length=0.10,
-                           n_thickness=_sc(3, density), n_length=_sc(10, density))
+    return make_u_channel(outer_width=0.07, outer_height=0.04,
+                           thickness=0.005, length=0.47,
+                           n_thickness=_sc(3, density), n_length=_sc(47, density))
 
 
 def _make_disk_with_hole_preset(density: float = 1.0):

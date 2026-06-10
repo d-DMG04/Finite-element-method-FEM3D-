@@ -30,7 +30,7 @@ from .mesh import (
     material_by_name, save_user_materials,
 )
 from .problem import (
-    BoundaryCondition, BoxGeometry, CONVECTION_PRESETS, MaterialRegion,
+    BoundaryCondition, BoxGeometry, CONVECTION_PRESETS, Immersion, MaterialRegion,
     PointSource, Problem,
     REGION_BOX, REGION_SPHERE, VolumeSource,
     HEATING_TEMPLATES,
@@ -77,7 +77,7 @@ __all__ = [
     "material_by_name", "save_user_materials",
     # problem
     "BoundaryCondition", "BoxGeometry", "CONVECTION_PRESETS",
-    "MaterialRegion", "PointSource",
+    "Immersion", "MaterialRegion", "PointSource",
     "Problem", "REGION_BOX", "REGION_SPHERE", "VolumeSource",
     "HEATING_TEMPLATES",
     "HEATING_TEMPLATES_FULL",
