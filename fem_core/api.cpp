@@ -391,9 +391,13 @@ extern "C" std::int32_t fem_solve_transient(
                 std::round((double)k * total_steps / (n_save - 1)));
         }
         std::int32_t saved_idx = 0;
+        // ВАЖНО: цикл while, а не if. Если total_steps < n_save - 1,
+        // массив save_at содержит ПОВТОРЯЮЩИЕСЯ номера шагов (округление),
+        // и одиночная проверка `if` пропускала все снимки после первого —
+        // остальные кадры оставались нулями («температура падает в 0»).
         auto save_snapshot = [&](std::int32_t step) {
-            if (saved_idx < n_save
-                && save_at[static_cast<std::size_t>(saved_idx)] == step) {
+            while (saved_idx < n_save
+                   && save_at[static_cast<std::size_t>(saved_idx)] <= step) {
                 out_times[saved_idx] = step * dt;
                 std::memcpy(out_T + saved_idx * N, s.T.data(),
                              static_cast<std::size_t>(N) * sizeof(double));

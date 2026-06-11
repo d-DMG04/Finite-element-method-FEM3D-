@@ -640,3 +640,96 @@ class TestConvection:
                              fluid_lambda=res.fluid.k)
         rel_err = abs(nu["h_actual"] - res.h) / res.h
         assert rel_err < 0.05, f"расхождение h {rel_err*100:.1f}% > 5%"
+
+
+class TestTransient:
+    """Нестационарный решатель: корректность снимков и физики."""
+
+    @staticmethod
+    def _cooling_problem():
+        from fem3d import Problem, BoxGeometry, BoundaryCondition, BC_ROBIN
+        p = Problem(geometry=BoxGeometry(Lx=0.1, Ly=0.1, Lz=0.1,
+                                         nx=6, ny=6, nz=6),
+                    lambda_=200.0)
+        p.rho, p.cp = 2700.0, 900.0
+        for f in range(6):
+            p.bcs[f] = BoundaryCondition(type=BC_ROBIN, alpha=50.0,
+                                         T_inf=20.0)
+        return p
+
+    def test_snapshots_when_more_saves_than_steps(self):
+        """Регресс: n_save > числа шагов — снимки НЕ должны быть нулями.
+
+        Раньше при n_save > t_end/dt + 1 массив моментов сохранения содержал
+        дубликаты, сохранение «застревало» после кадра t=0, и все остальные
+        кадры оставались нулевыми (анимация показывала падение T в 0).
+        """
+        from fem3d import CoreBridge
+        p = self._cooling_problem()
+        with CoreBridge() as b:
+            p.build_mesh_in_core(b)
+            times, hist = p.solve_transient(b, t_end=10.0, dt=1.0,
+                                            T_init=100.0, n_save=50)
+        import numpy as np
+        # Снимков ровно шагов+1, времена строго растут, нулевых кадров нет.
+        assert len(times) == 11
+        assert np.all(np.diff(times) > 0)
+        assert float(hist[1:].min()) > 0.0, "нулевые кадры — баг вернулся"
+
+    def test_cooling_is_monotonic(self):
+        """Остывание: средняя T монотонно убывает от T_init к T_inf."""
+        from fem3d import CoreBridge
+        import numpy as np
+        p = self._cooling_problem()
+        with CoreBridge() as b:
+            p.build_mesh_in_core(b)
+            times, hist = p.solve_transient(b, t_end=600.0, dt=10.0,
+                                            T_init=100.0, n_save=30)
+        means = hist.mean(axis=1)
+        assert means[0] > means[-1] > 20.0
+        assert np.all(np.diff(means) <= 1e-9)
+
+    def test_heating_is_monotonic(self):
+        """Нагрев Дирихле-стенкой: средняя T монотонно растёт."""
+        from fem3d import (CoreBridge, BoundaryCondition, BC_DIRICHLET)
+        import numpy as np
+        p = self._cooling_problem()
+        p.bcs = {f: BoundaryCondition() for f in range(6)}
+        p.bcs[0] = BoundaryCondition(type=BC_DIRICHLET, T0=100.0)
+        with CoreBridge() as b:
+            p.build_mesh_in_core(b)
+            times, hist = p.solve_transient(b, t_end=2000.0, dt=20.0,
+                                            T_init=20.0, n_save=40)
+        means = hist.mean(axis=1)
+        assert means[-1] > means[0] + 10.0
+        assert np.all(np.diff(means) >= -1e-9)
+
+    def test_transient_report_and_csv(self):
+        """Отдельный отчёт и CSV-история формируются без ошибок."""
+        import os, tempfile
+        from fem3d import CoreBridge
+        from fem3d.postprocess import (export_transient_report,
+                                        export_transient_history_csv,
+                                        transient_summary)
+        p = self._cooling_problem()
+        p.observation_points = [(0.05, 0.05, 0.05)]
+        with CoreBridge() as b:
+            p.build_mesh_in_core(b)
+            times, hist = p.solve_transient(b, t_end=600.0, dt=10.0,
+                                            T_init=100.0, n_save=30)
+        s = transient_summary(times, hist)
+        assert s["direction"] == "остывание"
+        assert s["t63"] is not None and s["t63"] > 0
+        with tempfile.TemporaryDirectory() as d:
+            rpt = os.path.join(d, "tr.txt")
+            csv = os.path.join(d, "tr.csv")
+            export_transient_report(p, times, hist, rpt,
+                                    params=dict(t_end=600.0, dt=10.0,
+                                                T_init=100.0,
+                                                rho=2700.0, cp=900.0))
+            export_transient_history_csv(p, times, hist, csv)
+            txt = open(rpt, encoding="utf-8").read()
+            assert "НЕСТАЦИОНАРНОМ" in txt and "ДИНАМИКА" in txt
+            assert "Число Фурье" in txt and "ТОЧКИ НАБЛЮДЕНИЯ" in txt
+            head = open(csv, encoding="utf-8").readline()
+            assert head.startswith("t_s;T_min_C;T_mean_C;T_max_C")

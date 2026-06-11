@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import Optional, Tuple
 
+import numpy as np
+
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox,
@@ -17,6 +19,8 @@ from PyQt5.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox,
                              QMessageBox, QPushButton, QScrollArea, QSlider,
                              QSpinBox, QStackedWidget, QTabWidget,
                              QTextBrowser, QToolButton, QVBoxLayout, QWidget)
+
+from .theme import current_theme
 
 from fem3d import BoundaryCondition, BoxGeometry
 
@@ -138,7 +142,7 @@ class SettingsDialog(QDialog):
             "на глаза при длительной работе."
         )
         theme_hint.setWordWrap(True)
-        theme_hint.setStyleSheet("color: #9aa0a6; font-size: 9pt;")
+        theme_hint.setStyleSheet(f"color: {current_theme().text_dim}; font-size: 9pt;")
         tf.addRow(theme_hint)
         tabs.addTab(theme_w, "Тема")
 
@@ -257,7 +261,10 @@ class HelpDialog(QDialog):
         outer = QVBoxLayout(self)
         browser = QTextBrowser()
         browser.setHtml(HELP_HTML)
-        browser.setStyleSheet("background-color: #1f2228; color: #dcdee2;")
+        from .theme import current_theme as _ct_help
+        _thh = _ct_help()
+        browser.setStyleSheet(
+            f"background-color: {_thh.input_bg}; color: {_thh.text};")
         browser.setOpenExternalLinks(True)
         outer.addWidget(browser)
         btns = QDialogButtonBox(QDialogButtonBox.Close)
@@ -312,7 +319,7 @@ class PointSourceDialog(QDialog):
 
         hint = QLabel("Источник будет привязан к ближайшему узлу сетки.\n"
                       "P > 0 — нагрев, P < 0 — отвод тепла.")
-        hint.setStyleSheet("color: #9aa0a6; font-size: 9pt;")
+        hint.setStyleSheet(f"color: {current_theme().text_dim}; font-size: 9pt;")
         hint.setWordWrap(True)
         form.addRow(hint)
 
@@ -496,7 +503,7 @@ class MaterialRegionDialog(QDialog):
             "в указанную область. Если узлов в области нет — регион не "
             "будет иметь эффекта."
         )
-        hint.setStyleSheet("color: #9aa0a6; font-size: 9pt;")
+        hint.setStyleSheet(f"color: {current_theme().text_dim}; font-size: 9pt;")
         hint.setWordWrap(True)
         outer.addWidget(hint)
 
@@ -573,7 +580,7 @@ class MaterialRegionsDialog(QDialog):
             "тетраэдр получает материал последнего региона, который его "
             "захватил."
         )
-        info.setStyleSheet("color: #9aa0a6;")
+        info.setStyleSheet(f"color: {current_theme().text_dim};")
         info.setWordWrap(True)
         outer.addWidget(info)
 
@@ -713,7 +720,7 @@ class GeometryDialog(QDialog):
             self.shape_combo.addItem(sps.label, sps)
         sw.addRow("Фигура:", self.shape_combo)
         self.shape_desc = QLabel("")
-        self.shape_desc.setStyleSheet("color: #9aa0a6; font-size: 9pt;")
+        self.shape_desc.setStyleSheet(f"color: {current_theme().text_dim}; font-size: 9pt;")
         self.shape_desc.setWordWrap(True)
         sw.addRow(self.shape_desc)
         self.shape_combo.currentIndexChanged.connect(self._on_shape)
@@ -727,7 +734,7 @@ class GeometryDialog(QDialog):
         self.density_slider.setValue(10)    # 1.0
         self.density_slider.setTickInterval(5)
         self.density_label = QLabel("Плотность сетки: ×1.0 (стандарт)")
-        self.density_label.setStyleSheet("color: #9aa0a6; font-size: 9pt;")
+        self.density_label.setStyleSheet(f"color: {current_theme().text_dim}; font-size: 9pt;")
         def _upd_density(v):
             d = v / 10.0
             tag = ("грубая" if d < 0.8 else
@@ -744,7 +751,7 @@ class GeometryDialog(QDialog):
         iw = QFormLayout(self.import_widget)
         iw.setContentsMargins(0, 0, 0, 0)
         self.import_label = QLabel("<i>Файл не выбран</i>")
-        self.import_label.setStyleSheet("color: #9aa0a6;")
+        self.import_label.setStyleSheet(f"color: {current_theme().text_dim};")
         self.import_label.setWordWrap(True)
         iw.addRow(self.import_label)
         self.btn_browse = QPushButton("Выбрать файл (MSH/VTU/STL/STEP)...")
@@ -913,7 +920,7 @@ class MaterialDialog(QDialog):
             "Чтобы задать <b>разные материалы в разных частях</b> детали, "
             "используйте «Регионы материалов»."
         )
-        hint.setStyleSheet("color: #9aa0a6; font-size: 9pt;")
+        hint.setStyleSheet(f"color: {current_theme().text_dim}; font-size: 9pt;")
         hint.setWordWrap(True)
         outer.addWidget(hint)
 
@@ -1016,7 +1023,7 @@ class MaterialLibraryDialog(QDialog):
             "Встроенные материалы помечены 🔒 (изменить нельзя). "
             "Пользовательские можно создать, изменить или удалить — они "
             "сохраняются в ~/.fem_heat3d_user_materials.json")
-        info.setStyleSheet("color: #9aa0a6; font-size: 9pt;")
+        info.setStyleSheet(f"color: {current_theme().text_dim}; font-size: 9pt;")
         info.setWordWrap(True)
         outer.addWidget(info)
 
@@ -1272,13 +1279,14 @@ class MaterialEditorDialog(QDialog):
 # =============================================================================
 
 class BoundaryConditionsDialog(QDialog):
-    """Понятный диалог граничных условий с физическими терминами.
+    """Диалог граничных условий: вкладки + список граней с одним редактором.
 
-    Для каждой грани:
-      • выбор типа из 5 физических вариантов с пояснением;
-      • поля параметров, скрываются/показываются в зависимости от типа;
-      • пресеты конвекции для быстрого подбора α и T_среды;
-      • подсказки с типичными значениями и формулами.
+    Структура (вместо сплошной «простыни» из карточек):
+      • вкладка «Грани» — слева список 6 граней с краткой сводкой текущего
+        условия, справа редактор выбранной грани (тип + параметры + формула);
+      • вкладка «Обдув» — вынужденная конвекция по скорости потока;
+      • вкладка «Погружение» — частичное погружение детали в жидкость.
+    Шаблоны сценариев и кнопка «Применить ко всем граням» — над списком.
     """
 
     # Типы условий с физическими названиями (для GUI).
@@ -1289,7 +1297,10 @@ class BoundaryConditionsDialog(QDialog):
     BC_KIND_CONVECTION = "convection"    # конвекция (Робен)
     BC_KIND_RADIATION  = "radiation"     # излучение (Стефан-Больцман)
 
-    # Описания каждого типа — для подсказки.
+    KIND_ORDER = (BC_KIND_NONE, BC_KIND_DIRICHLET, BC_KIND_INSULATED,
+                  BC_KIND_HEAT_FLUX, BC_KIND_CONVECTION, BC_KIND_RADIATION)
+
+    # Описания каждого типа — (название, пояснение, формула).
     BC_KIND_INFO = {
         BC_KIND_NONE: (
             "Не задано",
@@ -1336,139 +1347,193 @@ class BoundaryConditionsDialog(QDialog):
         ),
     }
 
-    def __init__(self, problem, parent: Optional[QWidget] = None) -> None:
+    # Короткие подписи для сводки в списке граней.
+    KIND_SHORT = {
+        BC_KIND_NONE:       "не задано",
+        BC_KIND_DIRICHLET:  "T₀",
+        BC_KIND_INSULATED:  "изоляция",
+        BC_KIND_HEAT_FLUX:  "поток q",
+        BC_KIND_CONVECTION: "конвекция",
+        BC_KIND_RADIATION:  "излучение",
+    }
+
+    def __init__(self, problem, parent: Optional[QWidget] = None,
+                 focus_face: int = 0) -> None:
         super().__init__(parent)
         self.setWindowTitle("Граничные условия")
-        self.resize(720, 560)
-        from fem3d import (FACE_NAMES, BC_NONE, BC_DIRICHLET, BC_NEUMANN,
-                            BC_ROBIN, BC_RADIATION, HEATING_TEMPLATES,
-                            CONVECTION_PRESETS)
+        self.resize(820, 560)
+        from fem3d import (FACE_NAMES, HEATING_TEMPLATES, CONVECTION_PRESETS)
 
         self._problem = problem
-        self._bcs = {fid: BoundaryCondition(
-            type=problem.bcs[fid].type, T0=problem.bcs[fid].T0,
-            q0=problem.bcs[fid].q0, alpha=problem.bcs[fid].alpha,
-            T_inf=problem.bcs[fid].T_inf,
-            emissivity=getattr(problem.bcs[fid], 'emissivity', 0.85))
-            for fid in range(6)}
-        self._face_widgets = {}   # fid → словарь с виджетами
+        self._face_names = FACE_NAMES
+        self._presets = CONVECTION_PRESETS
+
+        # --- Модель: состояние каждой грани (тип + все параметры). ----------
+        self._state = {}
+        for fid in range(6):
+            bc = problem.bcs[fid]
+            self._state[fid] = {
+                "kind":  self._bc_to_kind(bc),
+                "T0":    float(bc.T0),
+                "q":     float(bc.q0) if bc.q0 != 0 else 1000.0,
+                "alpha": float(bc.alpha) if bc.alpha > 0 else 10.0,
+                "tinf":  float(bc.T_inf),
+                "eps":   float(getattr(bc, "emissivity", 0.85)),
+                "tenv":  float(bc.T_inf),
+            }
+        self._current_fid = max(0, min(5, int(focus_face)))
+        self._loading = False     # защита от записи при загрузке редактора
 
         outer = QVBoxLayout(self)
         outer.setSpacing(8)
 
-        # ---- Шапка с шаблонами и пресетами ----
-        top = QHBoxLayout()
-        top.addWidget(QLabel("<b>Шаблон сценария:</b>"))
-        self.template_combo = QComboBox()
-        self.template_combo.setMinimumWidth(280)
-        self.template_combo.addItem("— Применить шаблон —", None)
-        for label, factory in HEATING_TEMPLATES:
-            self.template_combo.addItem(label, factory)
-        self.template_combo.currentIndexChanged.connect(self._on_template)
-        top.addWidget(self.template_combo, 1)
-        outer.addLayout(top)
-
-        # ---- Обдув основной фигуры потоком воздуха ----
-        outer.addWidget(self._build_air_flow_group())
-
-        # ---- Частичное погружение в жидкость ----
-        outer.addWidget(self._build_immersion_group())
-
-        # ---- Список карточек граней ----
-        from PyQt5.QtWidgets import QScrollArea, QStackedWidget
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
-        list_w = QWidget()
-        list_lay = QVBoxLayout(list_w)
-        list_lay.setContentsMargins(0, 0, 0, 0); list_lay.setSpacing(6)
-        for fid in range(6):
-            list_lay.addWidget(self._build_face_card(fid, FACE_NAMES[fid],
-                                                      CONVECTION_PRESETS))
-        list_lay.addStretch(1)
-        scroll.setWidget(list_w)
-        outer.addWidget(scroll, 1)
+        tabs = QTabWidget()
+        tabs.addTab(self._build_faces_tab(), "Грани")
+        tabs.addTab(self._build_air_flow_tab(), "Обдув")
+        tabs.addTab(self._build_immersion_tab(), "Погружение")
+        outer.addWidget(tabs, 1)
 
         btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         btns.accepted.connect(self.accept)
         btns.rejected.connect(self.reject)
         outer.addWidget(btns)
 
-    def _build_face_card(self, fid: int, face_name: str,
-                          convection_presets) -> QFrame:
-        """Карточка одной грани со всеми параметрами."""
-        from PyQt5.QtWidgets import QFrame, QStackedWidget
-        card = QFrame(); card.setObjectName("Card")
-        outer = QVBoxLayout(card); outer.setContentsMargins(10, 8, 10, 8)
-        outer.setSpacing(6)
+        # Стартовое состояние.
+        self.face_list.setCurrentRow(self._current_fid)
+        self._load_editor(self._current_fid)
+        self._refresh_all_summaries()
 
-        # Заголовок: имя грани + выпадающий список типа.
-        head = QHBoxLayout()
-        head.addWidget(QLabel(f"<b>{face_name}</b>"))
-        head.addStretch(0)
-        head.addWidget(QLabel("Тип условия:"))
-        kind_combo = QComboBox()
-        kind_combo.setMinimumWidth(220)
-        for kind in (self.BC_KIND_NONE, self.BC_KIND_DIRICHLET,
-                     self.BC_KIND_INSULATED, self.BC_KIND_HEAT_FLUX,
-                     self.BC_KIND_CONVECTION, self.BC_KIND_RADIATION):
-            kind_combo.addItem(self.BC_KIND_INFO[kind][0], kind)
-        # Установим текущий тип на основе bc.
-        kind_combo.setCurrentIndex(
-            list(self.BC_KIND_INFO.keys()).index(self._bc_to_kind(self._bcs[fid])))
-        head.addWidget(kind_combo)
-        outer.addLayout(head)
+    # =========================================================================
+    # Вкладка «Грани»: список + редактор.
+    # =========================================================================
+    def _build_faces_tab(self) -> QWidget:
+        from PyQt5.QtWidgets import QListWidget, QSplitter
 
-        # Подсказка.
-        hint = QLabel("")
-        hint.setWordWrap(True)
-        hint.setStyleSheet("color: #9aa0a6; font-size: 9pt;")
-        outer.addWidget(hint)
+        page = QWidget()
+        lay = QVBoxLayout(page)
+        lay.setContentsMargins(8, 8, 8, 8); lay.setSpacing(8)
 
-        # Stacked widget с параметрами под каждый тип.
-        stack = QStackedWidget()
-        # Индекс совпадает с порядком в BC_KIND_INFO.
+        # --- Верхняя строка: шаблон + «применить ко всем». -------------------
+        from fem3d import HEATING_TEMPLATES
+        top = QHBoxLayout()
+        top.addWidget(QLabel("<b>Шаблон сценария:</b>"))
+        self.template_combo = QComboBox()
+        self.template_combo.setMinimumWidth(260)
+        self.template_combo.addItem("— Применить шаблон —", None)
+        for label, factory in HEATING_TEMPLATES:
+            self.template_combo.addItem(label, factory)
+        self.template_combo.currentIndexChanged.connect(self._on_template)
+        top.addWidget(self.template_combo, 1)
 
-        # 0: None — пустой.
-        stack.addWidget(QWidget())
+        self.apply_all_btn = QPushButton("Применить ко всем граням")
+        self.apply_all_btn.setToolTip(
+            "Скопировать условие текущей грани на все шесть граней.")
+        self.apply_all_btn.clicked.connect(self._on_apply_to_all)
+        top.addWidget(self.apply_all_btn)
+        lay.addLayout(top)
+
+        # --- Слева список граней, справа редактор. ---------------------------
+        split = QSplitter(Qt.Horizontal)
+
+        self.face_list = QListWidget()
+        self.face_list.setMinimumWidth(250)
+        self.face_list.setAlternatingRowColors(True)
+        for fid in range(6):
+            self.face_list.addItem("")   # текст заполняется в _refresh_summary
+        self.face_list.currentRowChanged.connect(self._on_face_changed)
+        split.addWidget(self.face_list)
+
+        split.addWidget(self._build_editor_panel())
+        split.setStretchFactor(0, 0)
+        split.setStretchFactor(1, 1)
+        lay.addWidget(split, 1)
+        return page
+
+    def _build_editor_panel(self) -> QWidget:
+        from PyQt5.QtWidgets import QStackedWidget
+
+        panel = QFrame(); panel.setObjectName("Card")
+        v = QVBoxLayout(panel)
+        v.setContentsMargins(12, 10, 12, 10); v.setSpacing(8)
+
+        self.editor_title = QLabel("")
+        self.editor_title.setStyleSheet("font-size: 12pt; font-weight: bold;")
+        v.addWidget(self.editor_title)
+
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Тип условия:"))
+        self.kind_combo = QComboBox()
+        self.kind_combo.setMinimumWidth(240)
+        for kind in self.KIND_ORDER:
+            self.kind_combo.addItem(self.BC_KIND_INFO[kind][0], kind)
+        self.kind_combo.currentIndexChanged.connect(self._on_kind_changed)
+        row.addWidget(self.kind_combo, 1)
+        v.addLayout(row)
+
+        # Формула — отдельно и заметно.
+        self.formula_label = QLabel("")
+        self.formula_label.setStyleSheet(
+            'font-family: "Cambria Math", "DejaVu Serif", serif; '
+            "font-size: 11pt; padding: 2px 0;")
+        v.addWidget(self.formula_label)
+
+        # Пояснение.
+        self.hint_label = QLabel("")
+        self.hint_label.setWordWrap(True)
+        self.hint_label.setStyleSheet(f"color: {current_theme().text_dim}; font-size: 9pt;")
+        v.addWidget(self.hint_label)
+
+        # --- Параметры под каждый тип (стек). --------------------------------
+        self.stack = QStackedWidget()
+
+        # 0: None.
+        w0 = QWidget(); f0 = QFormLayout(w0); f0.setContentsMargins(0, 4, 0, 0)
+        f0.addRow(QLabel("<i>Параметров нет</i>"))
+        self.stack.addWidget(w0)
+
         # 1: Dirichlet — T₀.
-        w_d = QWidget(); fl_d = QFormLayout(w_d); fl_d.setContentsMargins(0, 0, 0, 0)
-        sp_T0 = QDoubleSpinBox(); sp_T0.setRange(-273, 5000); sp_T0.setSuffix(" °C")
-        sp_T0.setValue(self._bcs[fid].T0); sp_T0.setDecimals(2)
-        sp_T0.setToolTip("Температура в градусах Цельсия.\n"
-                          "Диапазон: −273 ... +5000 °C")
-        fl_d.addRow("Температура T₀:", sp_T0)
-        stack.addWidget(w_d)
-        # 2: Insulated — нет параметров.
-        w_ins = QWidget(); fl_ins = QFormLayout(w_ins); fl_ins.setContentsMargins(0, 0, 0, 0)
-        fl_ins.addRow(QLabel("<i>Параметров нет (∂T/∂n = 0)</i>"))
-        stack.addWidget(w_ins)
+        w1 = QWidget(); f1 = QFormLayout(w1); f1.setContentsMargins(0, 4, 0, 0)
+        self.sp_T0 = QDoubleSpinBox()
+        self.sp_T0.setRange(-273, 5000); self.sp_T0.setDecimals(2)
+        self.sp_T0.setSuffix(" °C")
+        self.sp_T0.setToolTip("Температура в градусах Цельсия.\n"
+                               "Диапазон: −273 ... +5000 °C")
+        f1.addRow("Температура T₀:", self.sp_T0)
+        self.stack.addWidget(w1)
+
+        # 2: Insulated.
+        w2 = QWidget(); f2 = QFormLayout(w2); f2.setContentsMargins(0, 4, 0, 0)
+        f2.addRow(QLabel("<i>Параметров нет (∂T/∂n = 0)</i>"))
+        self.stack.addWidget(w2)
+
         # 3: Heat flux — q.
-        w_q = QWidget(); fl_q = QFormLayout(w_q); fl_q.setContentsMargins(0, 0, 0, 0)
-        sp_q = QDoubleSpinBox(); sp_q.setRange(-1e9, 1e9); sp_q.setSuffix(" Вт/м²")
-        sp_q.setValue(self._bcs[fid].q0 if self._bcs[fid].q0 != 0 else 1000.0)
-        sp_q.setDecimals(2)
-        sp_q.setToolTip("Плотность теплового потока через грань.\n"
-                         "Положительное q — тело НАГРЕВАЕТСЯ, "
-                         "отрицательное — охлаждается.\n"
-                         "Типичные значения [Вт/м²]:\n"
-                         "  Солнечный поток ≈ 800–1000\n"
-                         "  Электрическая плита ≈ 10 000–50 000\n"
-                         "  Импульсный лазер ≈ 10⁵–10⁸")
-        fl_q.addRow("Поток q  (+нагрев, −отвод):", sp_q)
-        stack.addWidget(w_q)
+        w3 = QWidget(); f3 = QFormLayout(w3); f3.setContentsMargins(0, 4, 0, 0)
+        self.sp_q = QDoubleSpinBox()
+        self.sp_q.setRange(-1e9, 1e9); self.sp_q.setDecimals(2)
+        self.sp_q.setSuffix(" Вт/м²")
+        self.sp_q.setToolTip("Плотность теплового потока через грань.\n"
+                              "Положительное q — тело НАГРЕВАЕТСЯ, "
+                              "отрицательное — охлаждается.\n"
+                              "Типичные значения [Вт/м²]:\n"
+                              "  Солнечный поток ≈ 800–1000\n"
+                              "  Электрическая плита ≈ 10 000–50 000\n"
+                              "  Импульсный лазер ≈ 10⁵–10⁸")
+        f3.addRow("Поток q (+нагрев, −отвод):", self.sp_q)
+        self.stack.addWidget(w3)
+
         # 4: Convection — пресет + α + T∞.
-        w_c = QWidget(); fl_c = QFormLayout(w_c); fl_c.setContentsMargins(0, 0, 0, 0)
-        preset_combo = QComboBox()
-        for label, alpha_v, tinf_v in convection_presets:
-            preset_combo.addItem(label, (alpha_v, tinf_v))
-        preset_combo.setToolTip("Готовые значения α и T∞ для типичных сред.")
-        fl_c.addRow("Пресет:", preset_combo)
-        sp_alpha = QDoubleSpinBox(); sp_alpha.setRange(0, 1e6)
-        sp_alpha.setSuffix(" Вт/(м²·К)"); sp_alpha.setDecimals(2)
-        sp_alpha.setValue(self._bcs[fid].alpha
-                          if self._bcs[fid].alpha > 0 else 10.0)
-        sp_alpha.setToolTip(
+        w4 = QWidget(); f4 = QFormLayout(w4); f4.setContentsMargins(0, 4, 0, 0)
+        self.preset_combo = QComboBox()
+        for label, alpha_v, tinf_v in self._presets:
+            self.preset_combo.addItem(label, (alpha_v, tinf_v))
+        self.preset_combo.setToolTip(
+            "Готовые значения α и T∞ для типичных сред.")
+        self.preset_combo.currentIndexChanged.connect(self._on_preset)
+        f4.addRow("Пресет:", self.preset_combo)
+        self.sp_alpha = QDoubleSpinBox()
+        self.sp_alpha.setRange(0, 1e6); self.sp_alpha.setDecimals(2)
+        self.sp_alpha.setSuffix(" Вт/(м²·К)")
+        self.sp_alpha.setToolTip(
             "Коэффициент теплоотдачи α.\n"
             "Закон Ньютона: q = α (T_поверхности − T∞).\n"
             "Типичные значения [Вт/(м²·К)]:\n"
@@ -1478,71 +1543,149 @@ class BoundaryConditionsDialog(QDialog):
             "  Вода с насосом ≈ 1000–15000\n"
             "  Кипение ≈ 2500–25000\n"
             "  Конденсация пара ≈ 5000–100 000")
-        fl_c.addRow("Коэф. теплоотдачи α:", sp_alpha)
-        sp_tinf = QDoubleSpinBox(); sp_tinf.setRange(-273, 5000)
-        sp_tinf.setSuffix(" °C"); sp_tinf.setDecimals(2)
-        sp_tinf.setValue(self._bcs[fid].T_inf)
-        sp_tinf.setToolTip("Температура окружающей среды (вдали от поверхности).")
-        fl_c.addRow("Температура среды T∞:", sp_tinf)
+        f4.addRow("Коэф. теплоотдачи α:", self.sp_alpha)
+        self.sp_tinf = QDoubleSpinBox()
+        self.sp_tinf.setRange(-273, 5000); self.sp_tinf.setDecimals(2)
+        self.sp_tinf.setSuffix(" °C")
+        self.sp_tinf.setToolTip(
+            "Температура окружающей среды (вдали от поверхности).")
+        f4.addRow("Температура среды T∞:", self.sp_tinf)
+        self.stack.addWidget(w4)
 
-        def _on_preset(_i):
-            data = preset_combo.currentData()
-            if data and data[0] is not None:
-                sp_alpha.setValue(data[0])
-                sp_tinf.setValue(data[1])
-        preset_combo.currentIndexChanged.connect(_on_preset)
-        stack.addWidget(w_c)
         # 5: Radiation — ε + T_окр.
-        w_r = QWidget(); fl_r = QFormLayout(w_r); fl_r.setContentsMargins(0, 0, 0, 0)
-        sp_eps = QDoubleSpinBox(); sp_eps.setRange(0.0, 1.0); sp_eps.setSingleStep(0.05)
-        sp_eps.setDecimals(2)
-        sp_eps.setValue(self._bcs[fid].emissivity)
-        sp_eps.setToolTip(
+        w5 = QWidget(); f5 = QFormLayout(w5); f5.setContentsMargins(0, 4, 0, 0)
+        self.sp_eps = QDoubleSpinBox()
+        self.sp_eps.setRange(0.0, 1.0); self.sp_eps.setSingleStep(0.05)
+        self.sp_eps.setDecimals(2)
+        self.sp_eps.setToolTip(
             "Степень черноты поверхности ε ∈ [0, 1].\n"
             "  Полированный металл: 0.02 – 0.10\n"
             "  Окислённый/окрашенный: 0.20 – 0.95\n"
             "  Чёрное тело (абсолютное): 1.00")
-        fl_r.addRow("Степень черноты ε (0..1):", sp_eps)
-        sp_tenv = QDoubleSpinBox(); sp_tenv.setRange(-273, 5000)
-        sp_tenv.setSuffix(" °C"); sp_tenv.setDecimals(2)
-        sp_tenv.setValue(self._bcs[fid].T_inf)
-        sp_tenv.setToolTip("Температура окружающего пространства, °C.\n"
-                            "Применяется в формуле Стефана-Больцмана:\n"
-                            "q = ε σ (T⁴ − T_окр⁴)")
-        fl_r.addRow("Температура окружения T_окр:", sp_tenv)
-        stack.addWidget(w_r)
+        f5.addRow("Степень черноты ε (0..1):", self.sp_eps)
+        self.sp_tenv = QDoubleSpinBox()
+        self.sp_tenv.setRange(-273, 5000); self.sp_tenv.setDecimals(2)
+        self.sp_tenv.setSuffix(" °C")
+        self.sp_tenv.setToolTip("Температура окружающего пространства, °C.\n"
+                                 "Применяется в формуле Стефана-Больцмана:\n"
+                                 "q = ε σ (T⁴ − T_окр⁴)")
+        f5.addRow("Температура окружения T_окр:", self.sp_tenv)
+        self.stack.addWidget(w5)
 
-        outer.addWidget(stack)
+        v.addWidget(self.stack)
+        v.addStretch(1)
 
-        def _update_hint_and_stack(_i):
-            kind = kind_combo.currentData()
-            idx = list(self.BC_KIND_INFO.keys()).index(kind)
-            stack.setCurrentIndex(idx)
-            info = self.BC_KIND_INFO[kind]
-            text = info[1]
-            if info[2]:
-                text += f"<br><b>{info[2]}</b>"
-            hint.setText(text)
-        kind_combo.currentIndexChanged.connect(_update_hint_and_stack)
-        _update_hint_and_stack(0)
+        # Запись значений редактора в модель «на лету».
+        self.sp_T0.valueChanged.connect(
+            lambda val: self._write_state("T0", val))
+        self.sp_q.valueChanged.connect(
+            lambda val: self._write_state("q", val))
+        self.sp_alpha.valueChanged.connect(
+            lambda val: self._write_state("alpha", val))
+        self.sp_tinf.valueChanged.connect(
+            lambda val: self._write_state("tinf", val))
+        self.sp_eps.valueChanged.connect(
+            lambda val: self._write_state("eps", val))
+        self.sp_tenv.valueChanged.connect(
+            lambda val: self._write_state("tenv", val))
+        return panel
 
-        # Сохраняем виджеты для извлечения значений.
-        self._face_widgets[fid] = {
-            "kind": kind_combo,
-            "T0": sp_T0, "q": sp_q, "alpha": sp_alpha, "tinf": sp_tinf,
-            "eps": sp_eps, "tenv": sp_tenv, "preset": preset_combo,
-        }
-        return card
+    # --- Модель ↔ редактор ----------------------------------------------------
 
-    def _build_air_flow_group(self):
-        """Группа обдува: скорость+направление потока → h на все грани фигуры.
+    def _write_state(self, key: str, value: float) -> None:
+        if self._loading:
+            return
+        self._state[self._current_fid][key] = float(value)
+        self._refresh_summary(self._current_fid)
 
-        Характерный размер и площадь берутся из РЕАЛЬНОЙ геометрии фигуры,
-        поэтому условие применяется именно к основному телу, а не к
-        абстрактной форме."""
-        from PyQt5.QtWidgets import QGroupBox
-        box = QGroupBox("Обдув фигуры потоком воздуха (вынужденная конвекция)")
-        lay = QVBoxLayout(box)
+    def _on_kind_changed(self, _idx: int) -> None:
+        kind = self.kind_combo.currentData()
+        idx = self.KIND_ORDER.index(kind)
+        self.stack.setCurrentIndex(idx)
+        info = self.BC_KIND_INFO[kind]
+        self.formula_label.setText(f"<b>{info[2]}</b>" if info[2] else "")
+        self.hint_label.setText(info[1])
+        if not self._loading:
+            self._state[self._current_fid]["kind"] = kind
+            self._refresh_summary(self._current_fid)
+
+    def _on_preset(self, _i: int) -> None:
+        data = self.preset_combo.currentData()
+        if data and data[0] is not None:
+            self.sp_alpha.setValue(data[0])
+            self.sp_tinf.setValue(data[1])
+
+    def _on_face_changed(self, row: int) -> None:
+        if row < 0:
+            return
+        self._current_fid = row
+        self._load_editor(row)
+
+    def _load_editor(self, fid: int) -> None:
+        st = self._state[fid]
+        self._loading = True
+        try:
+            self.editor_title.setText(f"Грань {self._face_names[fid]}")
+            self.kind_combo.setCurrentIndex(self.KIND_ORDER.index(st["kind"]))
+            self._on_kind_changed(0)   # обновить стек/формулу/подсказку
+            self.sp_T0.setValue(st["T0"])
+            self.sp_q.setValue(st["q"])
+            self.sp_alpha.setValue(st["alpha"])
+            self.sp_tinf.setValue(st["tinf"])
+            self.sp_eps.setValue(st["eps"])
+            self.sp_tenv.setValue(st["tenv"])
+        finally:
+            self._loading = False
+
+    def _summary_text(self, fid: int) -> str:
+        st = self._state[fid]
+        k = st["kind"]
+        name = self._face_names[fid]
+        if k == self.BC_KIND_DIRICHLET:
+            detail = f"T₀ = {st['T0']:g} °C"
+        elif k == self.BC_KIND_HEAT_FLUX:
+            detail = f"q = {st['q']:g} Вт/м²"
+        elif k == self.BC_KIND_CONVECTION:
+            detail = f"α = {st['alpha']:g}, T∞ = {st['tinf']:g} °C"
+        elif k == self.BC_KIND_RADIATION:
+            detail = f"ε = {st['eps']:g}, T_окр = {st['tenv']:g} °C"
+        elif k == self.BC_KIND_INSULATED:
+            detail = "∂T/∂n = 0"
+        else:
+            detail = "—"
+        return f"{name}   |   {self.KIND_SHORT[k]}: {detail}"
+
+    def _refresh_summary(self, fid: int) -> None:
+        item = self.face_list.item(fid)
+        if item is not None:
+            item.setText(self._summary_text(fid))
+
+    def _refresh_all_summaries(self) -> None:
+        for fid in range(6):
+            self._refresh_summary(fid)
+
+    def _on_apply_to_all(self) -> None:
+        cur = dict(self._state[self._current_fid])
+        for fid in range(6):
+            self._state[fid] = dict(cur)
+        self._refresh_all_summaries()
+
+    # =========================================================================
+    # Вкладка «Обдув».
+    # =========================================================================
+    def _build_air_flow_tab(self) -> QWidget:
+        page = QWidget()
+        lay = QVBoxLayout(page)
+        lay.setContentsMargins(8, 8, 8, 8); lay.setSpacing(8)
+
+        intro = QLabel(
+            "Вынужденная конвекция при обтекании фигуры потоком воздуха. "
+            "По скорости U вычисляются Re, Nu и коэффициент теплоотдачи h "
+            "по размерам РЕАЛЬНОЙ геометрии, после чего конвекция "
+            "назначается на все шесть граней.")
+        intro.setWordWrap(True)
+        intro.setStyleSheet(f"color: {current_theme().text_dim};")
+        lay.addWidget(intro)
 
         self.flow_enable = QCheckBox(
             "Задавать конвекцию на гранях через обдув (а не вручную α)")
@@ -1550,16 +1693,14 @@ class BoundaryConditionsDialog(QDialog):
             bool(getattr(self._problem, "air_flow_enabled", False)))
         lay.addWidget(self.flow_enable)
 
-        row = QHBoxLayout()
-        row.addWidget(QLabel("Скорость U:"))
+        form = QFormLayout()
         self.flow_speed = QDoubleSpinBox()
         self.flow_speed.setRange(0.0, 500.0); self.flow_speed.setDecimals(2)
         self.flow_speed.setSuffix(" м/с")
         self.flow_speed.setValue(float(getattr(self._problem,
                                                "air_flow_speed", 0.0)) or 5.0)
-        row.addWidget(self.flow_speed)
+        form.addRow("Скорость U:", self.flow_speed)
 
-        row.addWidget(QLabel("Направление:"))
         self.flow_dir = QComboBox()
         self._flow_dirs = [("+X", "+x"), ("−X", "-x"), ("+Y", "+y"),
                            ("−Y", "-y"), ("+Z", "+z"), ("−Z", "-z")]
@@ -1569,31 +1710,29 @@ class BoundaryConditionsDialog(QDialog):
         for i, (_, code) in enumerate(self._flow_dirs):
             if code == cur_dir:
                 self.flow_dir.setCurrentIndex(i)
-        row.addWidget(self.flow_dir)
+        form.addRow("Направление:", self.flow_dir)
 
-        row.addWidget(QLabel("T∞:"))
         self.flow_tinf = QDoubleSpinBox()
         self.flow_tinf.setRange(-273.0, 2000.0); self.flow_tinf.setDecimals(1)
         self.flow_tinf.setSuffix(" °C")
         self.flow_tinf.setValue(float(getattr(self._problem,
                                               "air_flow_T_inf", 20.0)))
-        row.addWidget(self.flow_tinf)
-        lay.addLayout(row)
+        form.addRow("Температура воздуха T∞:", self.flow_tinf)
+        lay.addLayout(form)
 
-        btn_row = QHBoxLayout()
-        self.flow_apply_btn = QPushButton("Рассчитать h и применить ко всем граням")
+        self.flow_apply_btn = QPushButton(
+            "Рассчитать h и применить ко всем граням")
         self.flow_apply_btn.clicked.connect(self._on_apply_air_flow)
-        btn_row.addWidget(self.flow_apply_btn)
-        btn_row.addStretch(1)
-        lay.addLayout(btn_row)
+        lay.addWidget(self.flow_apply_btn)
 
         self.flow_result = QLabel(
             "Введите скорость и нажмите «Рассчитать h…». "
             "Re, Nu и h считаются по размерам самой фигуры.")
         self.flow_result.setWordWrap(True)
-        self.flow_result.setStyleSheet("color:#9aa0a6; font-size: 9pt;")
+        self.flow_result.setStyleSheet(f"color: {current_theme().text_dim}; font-size: 9pt;")
         lay.addWidget(self.flow_result)
-        return box
+        lay.addStretch(1)
+        return page
 
     def _on_apply_air_flow(self):
         """Посчитать h по обдуву и проставить конвекцию на все грани."""
@@ -1601,7 +1740,6 @@ class BoundaryConditionsDialog(QDialog):
         if self._problem.nodes is None:
             self.flow_result.setText("Сначала постройте сетку фигуры.")
             return
-        # Временно записываем параметры обдува в задачу для расчёта по фигуре.
         speed = float(self.flow_speed.value())
         direction = self._flow_dirs[self.flow_dir.currentIndex()][1]
         T_inf = float(self.flow_tinf.value())
@@ -1613,20 +1751,22 @@ class BoundaryConditionsDialog(QDialog):
                      if getattr(self._problem, "T", None) is not None
                      and self._problem.T.size else None)
         try:
-            res = cv.analyze_problem_air_flow(self._problem, T_surface=T_surface)
+            res = cv.analyze_problem_air_flow(self._problem,
+                                              T_surface=T_surface)
         except Exception as exc:
             self.flow_result.setText(f"Ошибка: {exc}")
             return
         if res is None:
             self.flow_result.setText("Задайте скорость > 0.")
             return
-        # Проставляем конвекцию α=h, T∞ на все грани (в виджеты).
-        idx_conv = list(self.BC_KIND_INFO.keys()).index(self.BC_KIND_CONVECTION)
+        # Конвекция α=h, T∞ — во ВСЕ грани (в модель, не в виджеты).
         for fid in range(6):
-            w = self._face_widgets[fid]
-            w["kind"].setCurrentIndex(idx_conv)
-            w["alpha"].setValue(res.h)
-            w["tinf"].setValue(T_inf)
+            st = self._state[fid]
+            st["kind"] = self.BC_KIND_CONVECTION
+            st["alpha"] = float(res.h)
+            st["tinf"] = T_inf
+        self._refresh_all_summaries()
+        self._load_editor(self._current_fid)
         self.flow_enable.setChecked(True)
         self.flow_result.setText(
             f"Re = {res.Re:.3g},  Nu = {res.Nu:.1f},  "
@@ -1635,7 +1775,7 @@ class BoundaryConditionsDialog(QDialog):
             f"Q ≈ {res.Q_total:.4g} Вт.")
 
     def air_flow_result(self) -> dict:
-        """Параметры обдува для сохранения в задачу (читается вызывающим кодом)."""
+        """Параметры обдува для сохранения в задачу."""
         return {
             "enabled": bool(self.flow_enable.isChecked()),
             "speed": float(self.flow_speed.value()),
@@ -1643,94 +1783,85 @@ class BoundaryConditionsDialog(QDialog):
             "T_inf": float(self.flow_tinf.value()),
         }
 
-    # ---- Частичное погружение в жидкость -----------------------------------
-    def _build_immersion_group(self):
-        """Группа «Погружение»: деталь частично опущена в воду.
-
-        Смоченный поясок (торец + нижние полоски стенок ниже линии воды)
-        получает отдельное ГУ — Дирихле T_воды (кипяток) или Робин h+T_воды.
-        Открытая часть теряет тепло через ГУ, заданные на гранях выше."""
-        from PyQt5.QtWidgets import QGroupBox
+    # =========================================================================
+    # Вкладка «Погружение».
+    # =========================================================================
+    def _build_immersion_tab(self) -> QWidget:
         from fem3d import BC_DIRICHLET, BC_ROBIN
         imm = getattr(self._problem, "immersion", None)
+        wb = imm.wetted_bc if imm else None
 
-        box = QGroupBox("Частичное погружение детали в жидкость")
-        lay = QVBoxLayout(box)
+        page = QWidget()
+        lay = QVBoxLayout(page)
+        lay.setContentsMargins(8, 8, 8, 8); lay.setSpacing(8)
+
+        intro = QLabel(
+            "Деталь частично опущена в жидкость. Линия воды режет стенки: "
+            "фасетки ниже неё получают ГУ воды, выше — ГУ, заданные на "
+            "вкладке «Грани». Кипяток ⇒ поверхность ≈ T воды, поэтому "
+            "обоснован Дирихле; h воды важен только для некипящей ванны.")
+        intro.setWordWrap(True)
+        intro.setStyleSheet(f"color: {current_theme().text_dim};")
+        lay.addWidget(intro)
 
         self.imm_enable = QCheckBox(
-            "Деталь частично погружена в жидкость (нижний конец в воде)")
+            "Деталь частично погружена в жидкость")
         self.imm_enable.setChecked(bool(imm.enabled) if imm else False)
         lay.addWidget(self.imm_enable)
 
-        row1 = QHBoxLayout()
-        row1.addWidget(QLabel("Ось погружения:"))
+        form = QFormLayout()
         self.imm_axis = QComboBox()
         for label, code in [("X", 0), ("Y", 1), ("Z (вертикаль)", 2)]:
             self.imm_axis.addItem(label, code)
         self.imm_axis.setCurrentIndex(imm.axis if imm else 2)
-        row1.addWidget(self.imm_axis)
+        form.addRow("Ось погружения:", self.imm_axis)
 
-        row1.addWidget(QLabel("В воде:"))
         self.imm_side = QComboBox()
         for label, code in [("нижний конец", 0), ("верхний конец", 1)]:
             self.imm_side.addItem(label, code)
         self.imm_side.setCurrentIndex(imm.side if imm else 0)
-        row1.addWidget(self.imm_side)
+        form.addRow("В воде:", self.imm_side)
 
-        row1.addWidget(QLabel("Линия воды:"))
         self.imm_level = QDoubleSpinBox()
         self.imm_level.setRange(0.0, 100.0); self.imm_level.setDecimals(4)
         self.imm_level.setSingleStep(0.005); self.imm_level.setSuffix(" м")
         self.imm_level.setValue(float(imm.level) if imm else 0.05)
-        row1.addWidget(self.imm_level)
-        lay.addLayout(row1)
+        form.addRow("Линия воды (глубина):", self.imm_level)
 
-        row2 = QHBoxLayout()
-        row2.addWidget(QLabel("Смоченный поясок:"))
         self.imm_kind = QComboBox()
         self.imm_kind.addItem("Дирихле T (кипяток, рекоменд.)", "dirichlet")
         self.imm_kind.addItem("Робин: h + T воды", "robin")
-        wb = imm.wetted_bc if imm else None
         self.imm_kind.setCurrentIndex(
             1 if (wb is not None and wb.type == BC_ROBIN) else 0)
-        row2.addWidget(self.imm_kind)
+        form.addRow("Смоченный поясок:", self.imm_kind)
 
-        row2.addWidget(QLabel("T воды:"))
         self.imm_twater = QDoubleSpinBox()
         self.imm_twater.setRange(-273.0, 2000.0); self.imm_twater.setDecimals(1)
         self.imm_twater.setSuffix(" °C")
         self.imm_twater.setValue(
             float(wb.T0) if (wb and wb.type == BC_DIRICHLET)
             else (float(wb.T_inf) if wb else 100.0))
-        row2.addWidget(self.imm_twater)
+        form.addRow("Температура воды:", self.imm_twater)
 
-        row2.addWidget(QLabel("h воды:"))
         self.imm_hwater = QDoubleSpinBox()
         self.imm_hwater.setRange(0.0, 1e6); self.imm_hwater.setDecimals(0)
         self.imm_hwater.setSuffix(" Вт/(м²·К)")
         self.imm_hwater.setValue(
             float(wb.alpha) if (wb and wb.type == BC_ROBIN and wb.alpha > 0)
             else 10000.0)
-        row2.addWidget(self.imm_hwater)
-        lay.addLayout(row2)
-
-        hint = QLabel(
-            "Линия воды режет стенки: фасетки ниже неё получают ГУ воды, выше — "
-            "ГУ, заданные на гранях. Кипяток ⇒ поверхность ≈ T воды, поэтому "
-            "Дирихле обоснован. h воды важен только для некипящей ванны.")
-        hint.setWordWrap(True)
-        hint.setStyleSheet("color:#9aa0a6; font-size: 9pt;")
-        lay.addWidget(hint)
+        form.addRow("h воды:", self.imm_hwater)
+        lay.addLayout(form)
+        lay.addStretch(1)
 
         def _sync_kind():
-            is_robin = self.imm_kind.currentData() == "robin"
-            self.imm_hwater.setEnabled(is_robin)
+            self.imm_hwater.setEnabled(
+                self.imm_kind.currentData() == "robin")
         self.imm_kind.currentIndexChanged.connect(lambda _i: _sync_kind())
         _sync_kind()
-        return box
+        return page
 
     def immersion_result(self):
-        """Объект Immersion для записи в задачу (читается вызывающим кодом)."""
+        """Объект Immersion для записи в задачу."""
         from fem3d import BC_DIRICHLET, BC_ROBIN
         from fem3d.problem import Immersion, BoundaryCondition
         if self.imm_kind.currentData() == "robin":
@@ -1748,13 +1879,17 @@ class BoundaryConditionsDialog(QDialog):
             wetted_bc=wetted,
         )
 
+    # =========================================================================
+    # Шаблоны и преобразования.
+    # =========================================================================
     def _bc_to_kind(self, bc) -> str:
         from fem3d import (BC_NONE, BC_DIRICHLET, BC_NEUMANN, BC_ROBIN,
                             BC_RADIATION)
         if bc.type == BC_NONE: return self.BC_KIND_NONE
         if bc.type == BC_DIRICHLET: return self.BC_KIND_DIRICHLET
         if bc.type == BC_NEUMANN:
-            return self.BC_KIND_INSULATED if abs(bc.q0) < 1e-15 else self.BC_KIND_HEAT_FLUX
+            return (self.BC_KIND_INSULATED if abs(bc.q0) < 1e-15
+                    else self.BC_KIND_HEAT_FLUX)
         if bc.type == BC_ROBIN: return self.BC_KIND_CONVECTION
         if bc.type == BC_RADIATION: return self.BC_KIND_RADIATION
         return self.BC_KIND_NONE
@@ -1765,17 +1900,17 @@ class BoundaryConditionsDialog(QDialog):
             return
         new_bcs = factory()
         for fid, bc in new_bcs.items():
-            w = self._face_widgets[fid]
-            kind = self._bc_to_kind(bc)
-            # Установить тип.
-            idx = list(self.BC_KIND_INFO.keys()).index(kind)
-            w["kind"].setCurrentIndex(idx)
-            # Установить значения.
-            w["T0"].setValue(bc.T0)
-            w["q"].setValue(bc.q0)
-            w["alpha"].setValue(bc.alpha)
-            w["tinf"].setValue(bc.T_inf)
-            w["tenv"].setValue(bc.T_inf)
+            st = self._state[fid]
+            st["kind"] = self._bc_to_kind(bc)
+            st["T0"] = float(bc.T0)
+            if bc.q0 != 0:
+                st["q"] = float(bc.q0)
+            if bc.alpha > 0:
+                st["alpha"] = float(bc.alpha)
+            st["tinf"] = float(bc.T_inf)
+            st["tenv"] = float(bc.T_inf)
+        self._refresh_all_summaries()
+        self._load_editor(self._current_fid)
         self.template_combo.blockSignals(True)
         self.template_combo.setCurrentIndex(0)
         self.template_combo.blockSignals(False)
@@ -1783,7 +1918,6 @@ class BoundaryConditionsDialog(QDialog):
     def result_bcs(self) -> dict:
         from fem3d import (BoundaryCondition, BC_NONE, BC_DIRICHLET,
                             BC_NEUMANN, BC_ROBIN, BC_RADIATION)
-        result = {}
         kind_to_bc_type = {
             self.BC_KIND_NONE: BC_NONE,
             self.BC_KIND_DIRICHLET: BC_DIRICHLET,
@@ -1792,23 +1926,23 @@ class BoundaryConditionsDialog(QDialog):
             self.BC_KIND_CONVECTION: BC_ROBIN,
             self.BC_KIND_RADIATION: BC_RADIATION,
         }
+        result = {}
         for fid in range(6):
-            w = self._face_widgets[fid]
-            kind = w["kind"].currentData()
-            bc_type = kind_to_bc_type[kind]
-            bc = BoundaryCondition(type=bc_type)
+            st = self._state[fid]
+            kind = st["kind"]
+            bc = BoundaryCondition(type=kind_to_bc_type[kind])
             if kind == self.BC_KIND_DIRICHLET:
-                bc.T0 = w["T0"].value()
+                bc.T0 = st["T0"]
             elif kind == self.BC_KIND_INSULATED:
                 bc.q0 = 0.0
             elif kind == self.BC_KIND_HEAT_FLUX:
-                bc.q0 = w["q"].value()
+                bc.q0 = st["q"]
             elif kind == self.BC_KIND_CONVECTION:
-                bc.alpha = w["alpha"].value()
-                bc.T_inf = w["tinf"].value()
+                bc.alpha = st["alpha"]
+                bc.T_inf = st["tinf"]
             elif kind == self.BC_KIND_RADIATION:
-                bc.emissivity = w["eps"].value()
-                bc.T_inf = w["tenv"].value()
+                bc.emissivity = st["eps"]
+                bc.T_inf = st["tenv"]
             result[fid] = bc
         return result
 
@@ -1818,28 +1952,37 @@ class BoundaryConditionsDialog(QDialog):
 # =============================================================================
 
 class TransientParamsDialog(QDialog):
-    """Параметры нестационарного расчёта: t_end, dt, T_init, n_save."""
+    """Параметры нестационарного расчёта.
 
-    def __init__(self, parent=None):
+    Базовые: t_end, dt, T_init, n_save.
+    Теплофизика: rho, cp (предзаполняются из задачи, можно переопределить).
+    Отображение: fps анимации, фиксированная цветовая шкала, автоповтор.
+    Диалог показывает живую сводку: a = lambda/(rho*cp), tau = L^2/a,
+    число шагов, Fo — и умеет подобрать dt и t_end по tau.
+    """
+
+    def __init__(self, parent=None, problem=None):
         super().__init__(parent)
         self.setWindowTitle("Параметры нестационарной задачи")
         self.setModal(True)
-        self.resize(420, 280)
+        self.resize(480, 560)
+        self._problem = problem
 
         layout = QVBoxLayout(self)
 
         hint = QLabel(
             "Нестационарная теплопроводность:\n"
             "  ρ·c_p · ∂T/∂t = ∇·(λ∇T) + Q\n"
-            "Неявная схема Эйлера на каждом шаге Δt.\n"
-            "Характерное время: τ ≈ ρ·c_p·L²/λ (тепловая инерция)."
+            "Неявная схема Эйлера (безусловно устойчива, точность O(Δt)).\n"
+            "Характерное время: τ ≈ ρ·c_p·L²/λ — тепловая инерция тела."
         )
         hint.setWordWrap(True)
-        hint.setStyleSheet("color: #9ca0aa; padding: 4px;")
+        hint.setStyleSheet(f"color: {current_theme().text_dim}; padding: 4px;")
         layout.addWidget(hint)
 
         form = QFormLayout()
 
+        # --- Интегрирование по времени -----------------------------------
         self.t_end_spin = QDoubleSpinBox()
         self.t_end_spin.setRange(1e-6, 1e8)
         self.t_end_spin.setDecimals(3)
@@ -1858,7 +2001,7 @@ class TransientParamsDialog(QDialog):
         self.dt_spin.setSuffix(" с")
         self.dt_spin.setToolTip(
             "Шаг по времени Δt.\n"
-            "Рекомендация: Δt ≈ τ/30 для гладкой динамики.\n"
+            "Рекомендация: Δt ≈ τ/30…τ/50 для гладкой динамики.\n"
             "Неявная схема Эйлера устойчива при любом Δt, "
             "но точность ~O(Δt).")
         form.addRow("Шаг по времени Δt:", self.dt_spin)
@@ -1871,7 +2014,7 @@ class TransientParamsDialog(QDialog):
         self.t_init_spin.setToolTip(
             "Начальная температура во ВСЕХ узлах тела при t=0.\n"
             "Чтобы увидеть динамику (нагрев/остывание), она должна\n"
-            "ОТЛИЧАТЬСЯ от температуры среды T∞ в условиях конвекции.\n"
+            "ОТЛИЧАТЬСЯ от температуры среды T∞ / стенки T₀ в ГУ.\n"
             "Например: T₀=100 °C при конвекции с T∞=20 °C → остывание.")
         form.addRow("Начальная T₀:", self.t_init_spin)
 
@@ -1880,10 +2023,79 @@ class TransientParamsDialog(QDialog):
         self.n_save_spin.setValue(50)
         self.n_save_spin.setToolTip(
             "Число сохранённых снимков для проигрывателя анимации.\n"
-            "Снимки распределены равномерно во времени.")
+            "Снимки распределены равномерно во времени.\n"
+            "Не может превышать число шагов t_end/Δt + 1 — лишние\n"
+            "снимки автоматически отбрасываются.")
         form.addRow("Снимков для анимации:", self.n_save_spin)
 
+        # --- Теплофизические свойства -------------------------------------
+        rho0, cp0 = 2700.0, 900.0
+        if problem is not None:
+            if getattr(problem, "rho", 0) > 0:
+                rho0 = float(problem.rho)
+            if getattr(problem, "cp", 0) > 0:
+                cp0 = float(problem.cp)
+
+        self.rho_spin = QDoubleSpinBox()
+        self.rho_spin.setRange(0.1, 50000.0)
+        self.rho_spin.setDecimals(1)
+        self.rho_spin.setValue(rho0)
+        self.rho_spin.setSuffix(" кг/м³")
+        self.rho_spin.setToolTip("Плотность материала ρ.")
+        form.addRow("Плотность ρ:", self.rho_spin)
+
+        self.cp_spin = QDoubleSpinBox()
+        self.cp_spin.setRange(1.0, 100000.0)
+        self.cp_spin.setDecimals(1)
+        self.cp_spin.setValue(cp0)
+        self.cp_spin.setSuffix(" Дж/(кг·К)")
+        self.cp_spin.setToolTip("Удельная теплоёмкость c_p.")
+        form.addRow("Теплоёмкость c_p:", self.cp_spin)
+
+        # --- Отображение ----------------------------------------------------
+        self.fps_spin = QSpinBox()
+        self.fps_spin.setRange(1, 60)
+        self.fps_spin.setValue(8)
+        self.fps_spin.setSuffix(" кадр/с")
+        self.fps_spin.setToolTip("Скорость воспроизведения анимации T(t).")
+        form.addRow("Скорость анимации:", self.fps_spin)
+
+        self.fixed_scale_check = QCheckBox(
+            "Единая цветовая шкала для всех кадров")
+        self.fixed_scale_check.setChecked(True)
+        self.fixed_scale_check.setToolTip(
+            "Шкала цветов фиксируется по глобальным Tmin/Tmax за всё время.\n"
+            "Так рост и падение температуры видны корректно: тело реально\n"
+            "«остывает» в синий или «греется» в красный.\n"
+            "Без фиксации каждый кадр нормируется на свой диапазон и\n"
+            "динамика визуально пропадает.")
+        form.addRow("", self.fixed_scale_check)
+
+        self.loop_check = QCheckBox("Зациклить воспроизведение")
+        self.loop_check.setChecked(False)
+        form.addRow("", self.loop_check)
+
         layout.addLayout(form)
+
+        # --- Кнопка автоподбора и живая сводка ------------------------------
+        self.auto_btn = QPushButton("Подобрать Δt и t_end по τ")
+        self.auto_btn.setToolTip(
+            "Δt = τ/40, t_end = 4·τ — стандартный выбор:\n"
+            "плавная анимация и практически полный выход в стационар.")
+        self.auto_btn.clicked.connect(self._on_auto_pick)
+        layout.addWidget(self.auto_btn)
+
+        self.info_label = QLabel("")
+        self.info_label.setWordWrap(True)
+        self.info_label.setStyleSheet(
+            'font-family: "Consolas", "DejaVu Sans Mono", monospace; '
+            f"font-size: 9pt; color: {current_theme().text_dim}; padding: 4px;")
+        layout.addWidget(self.info_label)
+
+        for w in (self.t_end_spin, self.dt_spin, self.rho_spin, self.cp_spin):
+            w.valueChanged.connect(self._update_info)
+        self.n_save_spin.valueChanged.connect(self._update_info)
+        self._update_info()
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -1891,12 +2103,89 @@ class TransientParamsDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
+    # -- Вспомогательное ------------------------------------------------------
+
+    def _char_length(self) -> float:
+        """Характерный размер L: минимальный габарит тела, м."""
+        p = self._problem
+        if p is not None and getattr(p, "geometry", None) is not None:
+            g = p.geometry
+            dims = [d for d in (g.Lx, g.Ly, g.Lz) if d and d > 0]
+            if dims:
+                return float(min(dims))
+        return 0.1
+
+    def _lambda(self) -> float:
+        p = self._problem
+        if p is not None and getattr(p, "lambda_", 0) > 0:
+            return float(p.lambda_)
+        return 200.0
+
+    def _tau(self) -> float:
+        """Характерное время τ = ρ·c_p·L²/λ, с."""
+        rho = self.rho_spin.value()
+        cp = self.cp_spin.value()
+        lam = self._lambda()
+        L = self._char_length()
+        return rho * cp * L * L / max(lam, 1e-12)
+
+    def _on_auto_pick(self) -> None:
+        tau = self._tau()
+        self.t_end_spin.setValue(max(4.0 * tau, 1e-3))
+        self.dt_spin.setValue(max(tau / 40.0, 1e-6))
+        self._update_info()
+
+    def _update_info(self) -> None:
+        rho = self.rho_spin.value()
+        cp = self.cp_spin.value()
+        lam = self._lambda()
+        L = self._char_length()
+        a = lam / max(rho * cp, 1e-12)            # температуропроводность
+        tau = self._tau()
+        t_end = self.t_end_spin.value()
+        dt = self.dt_spin.value()
+        steps = int(np.ceil(t_end / max(dt, 1e-12)))
+        Fo = a * t_end / max(L * L, 1e-18)        # число Фурье
+        n_save = self.n_save_spin.value()
+        lines = [
+            f"λ = {lam:g} Вт/(м·К),  L = {L:g} м",
+            f"a = λ/(ρ·c_p) = {a:.3e} м²/с",
+            f"τ = L²/a = {tau:.4g} с  (≈ {tau/60.0:.3g} мин)",
+            f"Шагов по времени: {steps},  Fo = a·t_end/L² = {Fo:.3g}",
+        ]
+        warn = []
+        if steps + 1 < n_save:
+            warn.append(f"снимков ({n_save}) больше, чем шагов+1 "
+                        f"({steps + 1}) — будет сохранено {steps + 1}")
+        if dt > tau and tau > 0:
+            warn.append("Δt > τ: динамика будет «перешагнута», "
+                        "уменьшите Δt")
+        if t_end < 0.5 * tau and tau > 0:
+            warn.append("t_end < τ/2: процесс не успеет развиться")
+        if steps > 200000:
+            warn.append(f"очень много шагов ({steps}) — расчёт будет долгим")
+        if warn:
+            lines.append("⚠ " + "; ".join(warn))
+            self.info_label.setStyleSheet(
+                'font-family: "Consolas", monospace; font-size: 9pt; '
+                "color: #e8a24e; padding: 4px;")
+        else:
+            self.info_label.setStyleSheet(
+                'font-family: "Consolas", monospace; font-size: 9pt; '
+                f"color: {current_theme().text_dim}; padding: 4px;")
+        self.info_label.setText("\n".join(lines))
+
     def params(self) -> dict:
         return {
-            "t_end":  float(self.t_end_spin.value()),
-            "dt":     float(self.dt_spin.value()),
-            "T_init": float(self.t_init_spin.value()),
-            "n_save": int(self.n_save_spin.value()),
+            "t_end":       float(self.t_end_spin.value()),
+            "dt":          float(self.dt_spin.value()),
+            "T_init":      float(self.t_init_spin.value()),
+            "n_save":      int(self.n_save_spin.value()),
+            "rho":         float(self.rho_spin.value()),
+            "cp":          float(self.cp_spin.value()),
+            "fps":         int(self.fps_spin.value()),
+            "fixed_scale": bool(self.fixed_scale_check.isChecked()),
+            "loop":        bool(self.loop_check.isChecked()),
         }
 
 
@@ -1953,7 +2242,9 @@ class TemplateGalleryDialog(QDialog):
                       "оранжевый — поток</span>, <span style='color:#e066b3'>"
                       "розовый — излучение</span>, серый — изоляция.")
         hint.setWordWrap(True); hint.setTextFormat(Qt.RichText)
-        hint.setStyleSheet("color: #b8bcc4; font-size: 9pt; padding: 4px;")
+        from .theme import current_theme as _ct
+        hint.setStyleSheet(
+            f"color: {_ct().text_dim}; font-size: 9pt; padding: 4px;")
         outer.addWidget(hint)
 
         from fem3d import HEATING_TEMPLATES_FULL
@@ -1973,9 +2264,11 @@ class TemplateGalleryDialog(QDialog):
         for i, (label, factory, desc, cat) in enumerate(HEATING_TEMPLATES_FULL):
             card = QFrame()
             card.setObjectName("Card")
+            _th = _ct()
             card.setStyleSheet(
-                "QFrame#Card { border: 1px solid #3c4049; border-radius: 6px; "
-                "background: #23262c; } QFrame#Card:hover { border-color: #7a6cf0; }")
+                f"QFrame#Card {{ border: 1px solid {_th.border}; "
+                f"border-radius: 6px; background: {_th.panel}; }} "
+                f"QFrame#Card:hover {{ border-color: {_th.accent}; }}")
             cl = QVBoxLayout(card); cl.setContentsMargins(8, 8, 8, 8); cl.setSpacing(4)
 
             row = QHBoxLayout(); row.addStretch(1)
@@ -1998,7 +2291,7 @@ class TemplateGalleryDialog(QDialog):
             name.setStyleSheet("font-size: 9pt;")
             cl.addWidget(name)
             d = QLabel(desc); d.setWordWrap(True)
-            d.setStyleSheet("color: #9aa0a6; font-size: 8pt;")
+            d.setStyleSheet(f"color: {_th.text_dim}; font-size: 8pt;")
             cl.addWidget(d, 1)
 
             btn = QPushButton("Применить")
@@ -2071,7 +2364,7 @@ class ForcedConvectionDialog(QDialog):
             "Цепочка расчёта:  U, L → Re = U·L/ν → Nu (корреляция формы)\n"
             "→ h = Nu·λ_возд/L → ГУ конвекции (α = h) → поток Q = h·A·ΔT.")
         hint.setWordWrap(True)
-        hint.setStyleSheet("color:#9ca0aa; padding:4px;")
+        hint.setStyleSheet(f"color: {current_theme().text_dim}; padding: 4px;")
         lay.addWidget(hint)
 
         form = QFormLayout()

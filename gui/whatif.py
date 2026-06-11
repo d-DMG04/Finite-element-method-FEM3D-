@@ -17,6 +17,8 @@ from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from PyQt5.QtWidgets import (QComboBox, QFormLayout, QHBoxLayout, QLabel,
                               QSlider, QVBoxLayout, QWidget)
 
+from .theme import current_theme
+
 
 class _LabeledSlider(QWidget):
     """Слайдер с подписью значения и логарифмическим масштабом по желанию."""
@@ -80,8 +82,10 @@ class WhatIfView(QWidget):
             "на огрублённой сетке. Удобно, чтобы быстро прочувствовать, как "
             "параметры влияют на результат. Точный расчёт — на вкладке 3D-вид.")
         hint.setWordWrap(True)
-        hint.setStyleSheet("color: #9aa0a6; font-size: 9pt;")
+        hint.setStyleSheet(
+            f"color: {current_theme().text_dim}; font-size: 9pt;")
         outer.addWidget(hint)
+        self._hint = hint
 
         form = QFormLayout()
         self.s_lambda = _LabeledSlider("λ", 0.1, 500.0, 50.0,
@@ -106,11 +110,9 @@ class WhatIfView(QWidget):
         outer.addLayout(scen_row)
 
         self.result = QLabel("Двигайте слайдер для расчёта…")
-        self.result.setStyleSheet(
-            "font-size: 11pt; padding: 8px; background: #23262c; "
-            "border-radius: 6px;")
         self.result.setWordWrap(True)
         outer.addWidget(self.result)
+        self.apply_theme()
 
         outer.addStretch(1)
 
@@ -122,6 +124,21 @@ class WhatIfView(QWidget):
         for s in (self.s_lambda, self.s_alpha, self.s_Q, self.s_tinf):
             s.changed.connect(self._schedule)
         self.scenario.currentIndexChanged.connect(self._schedule)
+
+    def apply_theme(self) -> None:
+        """Перекрасить панель результата и подсказку под текущую тему.
+
+        Раньше фон панели был прошит тёмным (#23262c), и в светлой/бежевой
+        теме получалось тёмное пятно с нечитаемым текстом.
+        """
+        th = current_theme()
+        self.result.setStyleSheet(
+            f"font-size: 11pt; padding: 8px; background: {th.input_bg}; "
+            f"color: {th.text}; border: 1px solid {th.border}; "
+            "border-radius: 6px;")
+        if hasattr(self, "_hint"):
+            self._hint.setStyleSheet(
+                f"color: {th.text_dim}; font-size: 9pt;")
 
     def _schedule(self):
         self._timer.start()

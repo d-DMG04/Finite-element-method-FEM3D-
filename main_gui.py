@@ -973,6 +973,15 @@ class MainWindow(QMainWindow):
         self.btn_report = QPushButton("Отчёт"); self.btn_report.setEnabled(False)
         self.btn_report.clicked.connect(self._export_report)
         layout.addWidget(self.btn_report)
+        self.btn_treport = QPushButton("Отчёт τ")
+        self.btn_treport.setEnabled(False)
+        self.btn_treport.setToolTip(
+            "Отдельный отчёт по нестационарному расчёту:\n"
+            "параметры схемы, теплофизика (a, τ, Fo), таблица динамики\n"
+            "Tmin/Tmean/Tmax(t), время выхода на стационар, точки\n"
+            "наблюдения. Рядом сохраняется CSV с историей T(t).")
+        self.btn_treport.clicked.connect(self._export_transient_report)
+        layout.addWidget(self.btn_treport)
         return panel
 
     # =========================================================================
@@ -1260,8 +1269,9 @@ class MainWindow(QMainWindow):
                 self.viz.add_source_marker(float(cx), float(cy), float(cz),
                                             color="#ff7b3a")
 
-    def _on_edit_all_bcs(self) -> None:
-        dlg = BoundaryConditionsDialog(self.problem, self)
+    def _on_edit_all_bcs(self, focus_face: int = 0) -> None:
+        dlg = BoundaryConditionsDialog(self.problem, self,
+                                        focus_face=focus_face)
         if dlg.exec_() == QDialog.Accepted:
             self.problem.bcs = dlg.result_bcs()
             # Сохраняем параметры обдува в задачу (для вывода и сохранения).
@@ -1276,8 +1286,8 @@ class MainWindow(QMainWindow):
             self._refresh_bc_overlay()
 
     def _on_edit_single_face(self, fid: int) -> None:
-        # Тот же диалог, но фокус сразу на нужной грани — мелкое улучшение UX.
-        self._on_edit_all_bcs()
+        # Тот же диалог, но фокус сразу на нужной грани.
+        self._on_edit_all_bcs(focus_face=int(fid))
 
     def _on_open_template_gallery(self) -> None:
         from gui import TemplateGalleryDialog
@@ -1404,18 +1414,19 @@ class MainWindow(QMainWindow):
         """Открыть диалог параметров нестационарной задачи."""
         if not enabled:
             return
-        from PyQt5.QtWidgets import QInputDialog
-        # Простой диалог с 4 полями.
-        dlg = TransientParamsDialog(self)
+        dlg = TransientParamsDialog(self, problem=self.problem)
         if dlg.exec_() != QDialog.Accepted:
             self.transient_check.setChecked(False)
             return
         p = dlg.params()
         self._transient_params = p
+        # ρ и c_p из диалога становятся свойствами задачи (и попадут в отчёт).
+        self.problem.rho = float(p["rho"])
+        self.problem.cp = float(p["cp"])
         self.statusBar().showMessage(
             f"Нестационарный режим: t_end={p['t_end']:.1f} с, "
             f"Δt={p['dt']:.3f} с, T_init={p['T_init']:.1f} °C, "
-            f"{p['n_save']} снимков", 5000)
+            f"{p['n_save']} снимков, {p['fps']} кадр/с", 5000)
 
     def _on_run(self) -> None:
         types = {bc.type for bc in self.problem.bcs.values()}
@@ -1467,9 +1478,22 @@ class MainWindow(QMainWindow):
                     max_iter=self.settings.cg_max_iter)
             self._transient_times = times
             self._transient_T_history = T_hist
+            # Фиксируем цветовую шкалу по ГЛОБАЛЬНОМУ диапазону за всё время —
+            # иначе каждый кадр нормируется на собственные Tmin/Tmax и
+            # рост/падение температуры визуально не виден.
+            Tg_min, Tg_max = float(T_hist.min()), float(T_hist.max())
+            if p.get("fixed_scale", True):
+                self.viz.set_fixed_clim(Tg_min, Tg_max)
+            else:
+                self.viz.clear_fixed_clim()
+            means = T_hist.mean(axis=1)
+            dT = float(means[-1] - means[0])
+            trend = ("нагрев" if dT > 1e-6 else
+                     "остывание" if dT < -1e-6 else "стационар")
             self.result_label.setText(
-                f"Готово: {len(times)} снимков, "
-                f"T={T_hist.min():.2f}..{T_hist.max():.2f} °C")
+                f"Готово: {len(times)} снимков за {times[-1]:g} с, "
+                f"T={Tg_min:.2f}..{Tg_max:.2f} °C, "
+                f"Tmean {means[0]:.2f}→{means[-1]:.2f} °C ({trend})")
             # Включаем плеер.
             self._build_or_show_transient_player()
             # ВАЖНО: показываем НАЧАЛЬНЫЙ кадр (t=0, нагретое состояние),
@@ -1480,8 +1504,9 @@ class MainWindow(QMainWindow):
             # Автозапуск анимации остывания/прогрева — пользователь сразу
             # видит динамику, а не статичный кадр.
             self._autostart_transient_animation()
-            # Активируем кнопки экспорта.
-            for btn_name in ("btn_vtu", "btn_csv", "btn_report"):
+            # Активируем кнопки экспорта (включая отдельный отчёт τ).
+            for btn_name in ("btn_vtu", "btn_csv", "btn_report",
+                              "btn_treport"):
                 if hasattr(self, btn_name):
                     getattr(self, btn_name).setEnabled(True)
             # Если заданы точки наблюдения — показать график T(t).
@@ -1697,7 +1722,10 @@ class MainWindow(QMainWindow):
             self._tp_slider.valueChanged.connect(self._on_transient_slider)
             lay.addWidget(self._tp_slider, 1)
             self._tp_label = QLabel("t = 0.000 с")
-            self._tp_label.setMinimumWidth(140)
+            self._tp_label.setMinimumWidth(300)
+            self._tp_label.setStyleSheet(
+                'font-family: "Consolas", "DejaVu Sans Mono", monospace; '
+                "font-size: 9pt;")
             lay.addWidget(self._tp_label)
             self._transient_player_widget = w
             self._tp_timer = QTimer(self)
@@ -1713,6 +1741,11 @@ class MainWindow(QMainWindow):
         n = len(self._transient_times)
         self._tp_slider.setMaximum(n - 1)
         self._tp_slider.setValue(0)
+        # Скорость анимации из параметров (кадр/с).
+        p = getattr(self, "_transient_params", None) or {}
+        fps = max(1, int(p.get("fps", 8)))
+        self._tp_timer.setInterval(int(round(1000.0 / fps)))
+        self._tp_loop = bool(p.get("loop", False))
         self._transient_player_widget.show()
 
     def _autostart_transient_animation(self) -> None:
@@ -1733,7 +1766,9 @@ class MainWindow(QMainWindow):
         T_at = self._transient_T_history[idx]
         t_at = self._transient_times[idx]
         self.viz.set_temperature(T_at)
-        self._tp_label.setText(f"t = {t_at:.3f} с  ({idx + 1}/{len(self._transient_times)})")
+        self._tp_label.setText(
+            f"t = {t_at:.3g} с  ({idx + 1}/{len(self._transient_times)})   "
+            f"T: {T_at.min():.1f} / {T_at.mean():.1f} / {T_at.max():.1f} °C")
 
     def _on_transient_play_toggle(self) -> None:
         self._tp_playing = not self._tp_playing
@@ -1748,6 +1783,9 @@ class MainWindow(QMainWindow):
     def _on_transient_timer(self) -> None:
         v = self._tp_slider.value()
         if v >= self._tp_slider.maximum():
+            if getattr(self, "_tp_loop", False):
+                self._tp_slider.setValue(0)
+                return
             self._tp_timer.stop()
             self._tp_playing = False
             self._tp_play_btn.setText("▶")
@@ -1755,6 +1793,15 @@ class MainWindow(QMainWindow):
         self._tp_slider.setValue(v + 1)
 
     def _run_steady(self) -> None:
+        # Возврат из нестационарного режима: авто-шкала и скрытый плеер.
+        if hasattr(self.viz, "clear_fixed_clim"):
+            self.viz.clear_fixed_clim()
+        if hasattr(self, "_tp_timer"):
+            self._tp_timer.stop()
+            self._tp_playing = False
+            self._tp_play_btn.setText("▶")
+        if hasattr(self, "_transient_player_widget"):
+            self._transient_player_widget.hide()
 
         self.run_button.setEnabled(False)
         self.cancel_button.setVisible(True)
@@ -2153,6 +2200,36 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self, "Ошибка экспорта", str(exc))
 
+    def _export_transient_report(self) -> None:
+        """Отдельный отчёт по нестационарному расчёту (+ CSV истории T(t))."""
+        times = getattr(self, "_transient_times", None)
+        hist = getattr(self, "_transient_T_history", None)
+        if times is None or hist is None:
+            QMessageBox.information(
+                self, "Нет данных",
+                "Сначала выполните нестационарный расчёт "
+                "(галочка «τ Нестационарный» + «Запустить расчёт»).")
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Отчёт по нестационарному расчёту",
+            "transient_report.txt", "Текстовый файл (*.txt)")
+        if not path:
+            return
+        try:
+            from fem3d.postprocess import (export_transient_report,
+                                            export_transient_history_csv)
+            params = getattr(self, "_transient_params", None)
+            export_transient_report(self.problem, times, hist, path,
+                                    params=params)
+            # Рядом — CSV с историей (тот же путь, суффикс _history.csv).
+            base, _ext = os.path.splitext(path)
+            csv_path = base + "_history.csv"
+            export_transient_history_csv(self.problem, times, hist, csv_path)
+            self.statusBar().showMessage(
+                f"Сохранено: {path} и {csv_path}", 7000)
+        except Exception as exc:
+            QMessageBox.critical(self, "Ошибка экспорта", str(exc))
+
     def _export_pdf(self) -> None:
         """Экспорт сводного отчёта в PDF. По возможности — со скриншотом 3D."""
         if self.problem.T is None:
@@ -2351,6 +2428,14 @@ class MainWindow(QMainWindow):
         t = current_theme()
         # 3D-вьюпорт.
         self.viz.set_viewport_background(t.viewport_bg)
+        # Вкладка «Графики»: фигура matplotlib в цветах темы.
+        if hasattr(self, "plots_view") and hasattr(self.plots_view,
+                                                    "apply_theme"):
+            self.plots_view.apply_theme()
+        # Вкладка «Что будет, если…»: панель результата.
+        if hasattr(self, "whatif_view") and hasattr(self.whatif_view,
+                                                     "apply_theme"):
+            self.whatif_view.apply_theme()
         # Текст-описания (text_dim).
         self.info_label.setStyleSheet(f"color: {t.text_dim}; font-size: 9pt;")
         self.pick_status_label.setStyleSheet(f"color: {t.text_dim}; font-size: 9pt;")

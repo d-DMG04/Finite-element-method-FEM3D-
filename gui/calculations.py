@@ -21,6 +21,8 @@ from PyQt5.QtWidgets import (QAbstractItemView, QComboBox, QFileDialog,
                               QTableWidget, QTableWidgetItem, QTextEdit,
                               QVBoxLayout, QWidget)
 
+from .theme import current_theme
+
 from fem3d import FACE_NAMES, BC_DIRICHLET, BC_NEUMANN, BC_ROBIN, Problem
 
 
@@ -77,7 +79,7 @@ class CalculationsView(QWidget):
             "Двойной клик по строке — открыть расчёт. "
             "Колонки можно сортировать. Выберите несколько строк через "
             "Ctrl и нажмите «Сравнить» для наложения графиков.")
-        hint.setStyleSheet("color: #9aa0a6; font-size: 9pt;")
+        hint.setStyleSheet(f"color: {current_theme().text_dim}; font-size: 9pt;")
         outer.addWidget(hint)
 
         splitter = QSplitter(Qt.Vertical)
@@ -124,7 +126,7 @@ class CalculationsView(QWidget):
         np_layout.addLayout(np_ctrl)
 
         self.node_info = QLabel("")
-        self.node_info.setStyleSheet("color: #9aa0a6; font-size: 9pt;")
+        self.node_info.setStyleSheet(f"color: {current_theme().text_dim}; font-size: 9pt;")
         np_layout.addWidget(self.node_info)
 
         self.node_table = QTableWidget(0, 8)
@@ -551,17 +553,18 @@ class ComparisonDialog(QWidget):
         dlg.setWindowTitle("Сравнение расчётов")
         dlg.resize(900, 600)
         outer = QVBoxLayout(dlg)
-        fig = Figure(figsize=(9, 6), facecolor="#2a2e36")
+        th = current_theme()
+        fig = Figure(figsize=(9, 6), facecolor=th.panel)
         canvas = FigureCanvasQTAgg(fig)
         outer.addWidget(canvas)
 
         ax = fig.add_subplot(111)
-        ax.set_facecolor("#2a2e36")
-        ax.set_xlabel("x, м", color="#dcdee2")
-        ax.set_ylabel("T, °C", color="#dcdee2")
-        ax.tick_params(colors="#dcdee2")
+        ax.set_facecolor(th.bg)
+        ax.set_xlabel("x, м", color=th.text)
+        ax.set_ylabel("T, °C", color=th.text)
+        ax.tick_params(colors=th.text)
         ax.set_title("Профиль T(x) вдоль центральной линии y=Ly/2, z=Lz/2",
-                     color="#dcdee2")
+                     color=th.text)
 
         import numpy as np
         for i, rec in enumerate(recs):
@@ -580,8 +583,8 @@ class ComparisonDialog(QWidget):
             order = np.argsort(xs)
             ax.plot(xs[order], Ts[order], "-o", markersize=3,
                     label=rec.title, linewidth=1.5)
-        ax.legend(facecolor="#1a1d22", edgecolor="#3c4049",
-                  labelcolor="#dcdee2")
+        ax.legend(facecolor=th.panel, edgecolor=th.border,
+                  labelcolor=th.text)
         ax.grid(alpha=0.3)
         canvas.draw()
         dlg.exec_()
@@ -617,17 +620,18 @@ class ComparisonDialog(_QDialog):  # type: ignore[no-redef]
             outer.addWidget(QLabel("matplotlib недоступен."))
             return
 
-        fig = Figure(figsize=(9, 6), facecolor="#2a2e36")
+        th = current_theme()
+        fig = Figure(figsize=(9, 6), facecolor=th.panel)
         canvas = FigureCanvasQTAgg(fig)
         outer.addWidget(canvas)
 
         ax = fig.add_subplot(111)
-        ax.set_facecolor("#2a2e36")
-        ax.set_xlabel("x, м", color="#dcdee2")
-        ax.set_ylabel("T, °C", color="#dcdee2")
-        ax.tick_params(colors="#dcdee2")
+        ax.set_facecolor(th.bg)
+        ax.set_xlabel("x, м", color=th.text)
+        ax.set_ylabel("T, °C", color=th.text)
+        ax.tick_params(colors=th.text)
         ax.set_title("Профиль T(x) вдоль центральной линии y=Ly/2, z=Lz/2",
-                     color="#dcdee2")
+                     color=th.text)
 
         import numpy as np
         for rec in records:
@@ -645,7 +649,7 @@ class ComparisonDialog(_QDialog):  # type: ignore[no-redef]
             order = np.argsort(xs)
             ax.plot(xs[order], Ts[order], "-o", markersize=3,
                     label=rec.title, linewidth=1.5)
-        ax.legend(facecolor="#1a1d22", edgecolor="#3c4049",
-                  labelcolor="#dcdee2")
+        ax.legend(facecolor=th.panel, edgecolor=th.border,
+                  labelcolor=th.text)
         ax.grid(alpha=0.3)
         canvas.draw()

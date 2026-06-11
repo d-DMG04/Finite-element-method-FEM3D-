@@ -681,3 +681,270 @@ def sample_history_at_points(nodes: np.ndarray, T_history: np.ndarray,
     for p in range(P):
         out[p, :] = T_history[:, int(idxs[p])]
     return out
+
+
+# =============================================================================
+# Отчёт по нестационарному расчёту.
+# =============================================================================
+
+def _transient_dynamics_table(times: np.ndarray, T_history: np.ndarray,
+                              max_rows: int = 25):
+    """Прореженная таблица динамики: (t, Tmin, Tmean, Tmax) по снимкам."""
+    n = len(times)
+    if n <= max_rows:
+        idxs = np.arange(n)
+    else:
+        idxs = np.unique(np.round(np.linspace(0, n - 1, max_rows)).astype(int))
+    rows = []
+    for i in idxs:
+        T = T_history[i]
+        rows.append((float(times[i]), float(T.min()),
+                     float(T.mean()), float(T.max())))
+    return rows
+
+
+def transient_summary(times: np.ndarray, T_history: np.ndarray) -> dict:
+    """Интегральные характеристики переходного процесса.
+
+    Возвращает словарь:
+        direction      — 'нагрев' / 'остывание' / 'смешанный/стационарный'
+        T_mean_0/T_mean_end — средняя T в начале и в конце, °C
+        dT_total       — суммарное изменение средней T, °C
+        t63 / t95      — время достижения 63.2 % / 95 % полного изменения, с
+        settled        — степень выхода на стационар (0..1) по последним кадрам
+        rate_initial   — начальная скорость изменения средней T, °C/с
+        cooling_rate_m — темп процесса m (регулярный режим), 1/с, или None
+    """
+    times = np.asarray(times, dtype=np.float64)
+    means = T_history.mean(axis=1)
+    T0, Te = float(means[0]), float(means[-1])
+    dT = Te - T0
+    if abs(dT) < 1e-9:
+        direction = "стационарный (средняя T не изменилась)"
+    elif dT > 0:
+        direction = "нагрев"
+    else:
+        direction = "остывание"
+
+    # Время достижения 63.2 % и 95 % полного изменения средней T.
+    t63 = t95 = None
+    if abs(dT) > 1e-9:
+        frac = (means - T0) / dT          # 0 → 1, монотонно для типовых задач
+        for level, name in ((0.632, "t63"), (0.95, "t95")):
+            above = np.nonzero(frac >= level)[0]
+            if above.size:
+                k = int(above[0])
+                if k == 0:
+                    t_val = float(times[0])
+                else:
+                    # Линейная интерполяция между кадрами k-1 и k.
+                    f0, f1 = frac[k - 1], frac[k]
+                    t0_, t1_ = times[k - 1], times[k]
+                    t_val = float(t0_ + (level - f0) / max(f1 - f0, 1e-12)
+                                  * (t1_ - t0_))
+                if name == "t63":
+                    t63 = t_val
+                else:
+                    t95 = t_val
+
+    # Степень выхода на стационар: изменение за последние 10 % времени
+    # относительно полного изменения.
+    settled = None
+    if abs(dT) > 1e-9 and len(times) >= 3:
+        k_tail = max(1, int(0.9 * (len(times) - 1)))
+        tail_change = abs(float(means[-1] - means[k_tail]))
+        settled = max(0.0, min(1.0, 1.0 - tail_change / abs(dT)))
+
+    # Начальная скорость изменения средней T.
+    rate_initial = None
+    if len(times) >= 2 and times[1] > times[0]:
+        rate_initial = float((means[1] - means[0]) / (times[1] - times[0]))
+
+    # Темп процесса m (метод регулярного режима): ln|Tmean - Tend| ~ -m·t.
+    cooling_rate_m = None
+    if abs(dT) > 1e-6 and len(times) >= 6:
+        theta = np.abs(means - Te)
+        # Берём средний участок (отбрасываем начальный нерегулярный режим
+        # и хвост, где theta → 0 и логарифм шумит).
+        lo, hi = int(0.2 * len(times)), int(0.8 * len(times))
+        seg_t, seg_th = times[lo:hi], theta[lo:hi]
+        mask = seg_th > 1e-6 * abs(dT)
+        if int(mask.sum()) >= 3:
+            coeff = np.polyfit(seg_t[mask], np.log(seg_th[mask]), 1)
+            if coeff[0] < 0:
+                cooling_rate_m = float(-coeff[0])
+
+    return {
+        "direction": direction,
+        "T_mean_0": T0, "T_mean_end": Te, "dT_total": dT,
+        "t63": t63, "t95": t95, "settled": settled,
+        "rate_initial": rate_initial, "cooling_rate_m": cooling_rate_m,
+    }
+
+
+def export_transient_report(problem: Problem, times: np.ndarray,
+                            T_history: np.ndarray, path: str,
+                            params: Optional[dict] = None) -> None:
+    """Сформировать отдельный отчёт о НЕСТАЦИОНАРНОМ расчёте.
+
+    problem   — задача (геометрия, материал, ГУ, ρ, c_p).
+    times     — (n_save,) моменты времени снимков, с.
+    T_history — (n_save, N) температуры узлов на каждом снимке.
+    path      — куда сохранить .txt.
+    params    — параметры интегрирования из GUI (t_end, dt, T_init, ...).
+    """
+    times = np.asarray(times, dtype=np.float64)
+    T_history = np.asarray(T_history, dtype=np.float64)
+    if times.size < 2 or T_history.ndim != 2:
+        raise RuntimeError("Нет данных нестационарного расчёта")
+
+    g = problem.geometry
+    p = params or {}
+    dt = float(p.get("dt", times[1] - times[0] if times.size > 1 else 0.0))
+    t_end = float(p.get("t_end", times[-1]))
+    T_init = p.get("T_init")
+    rho = float(p.get("rho", getattr(problem, "rho", 0.0)) or 0.0)
+    cp = float(p.get("cp", getattr(problem, "cp", 0.0)) or 0.0)
+    lam = float(problem.lambda_)
+    n_steps = int(np.ceil(t_end / dt)) if dt > 0 else 0
+
+    # Теплофизические производные величины.
+    a = lam / (rho * cp) if rho > 0 and cp > 0 else None
+    dims = [d for d in (g.Lx, g.Ly, g.Lz) if d and d > 0]
+    L = float(min(dims)) if dims else None
+    tau = (L * L / a) if (a and L) else None
+    Fo = (a * t_end / (L * L)) if (a and L) else None
+
+    summ = transient_summary(times, T_history)
+
+    lines = []
+    ap = lines.append
+    ap("=" * 70)
+    ap("Отчёт о НЕСТАЦИОНАРНОМ расчёте — программный комплекс МКЭ")
+    ap(f"Сформирован: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    ap("=" * 70)
+    ap("")
+    ap("РЕЖИМ")
+    ap("  Нестационарная теплопроводность: ρ·c_p·∂T/∂t = ∇·(λ∇T) + Q")
+    ap("  Схема интегрирования: неявная схема Эйлера 1-го порядка")
+    ap("  (безусловно устойчива; точность O(Δt))")
+    ap("")
+    ap("ПАРАМЕТРЫ ИНТЕГРИРОВАНИЯ")
+    ap(f"  Конечное время t_end:   {t_end:g} с")
+    ap(f"  Шаг по времени Δt:      {dt:g} с")
+    ap(f"  Число шагов:            {n_steps}")
+    ap(f"  Сохранено снимков:      {len(times)}")
+    if T_init is not None:
+        ap(f"  Начальная T₀:           {float(T_init):g} °C")
+    ap("")
+    ap("ГЕОМЕТРИЯ И СЕТКА")
+    ap(f"  Размеры: Lx = {g.Lx:g} м, Ly = {g.Ly:g} м, Lz = {g.Lz:g} м")
+    if problem.nodes is not None:
+        ap(f"  Узлов:      {problem.nodes.shape[0]}")
+    if problem.elements is not None:
+        ap(f"  Элементов:  {problem.elements.shape[0]}")
+    ap("")
+    ap("ТЕПЛОФИЗИЧЕСКИЕ СВОЙСТВА")
+    ap(f"  λ   = {lam:g} Вт/(м·К)")
+    ap(f"  ρ   = {rho:g} кг/м³")
+    ap(f"  c_p = {cp:g} Дж/(кг·К)")
+    ap(f"  Q   = {problem.Q:g} Вт/м³")
+    if a is not None:
+        ap(f"  Температуропроводность a = λ/(ρ·c_p) = {a:.4e} м²/с")
+    if L is not None:
+        ap(f"  Характерный размер L = {L:g} м")
+    if tau is not None:
+        ap(f"  Характерное время  τ = L²/a = {tau:.4g} с "
+           f"(≈ {tau/60.0:.3g} мин)")
+    if Fo is not None:
+        ap(f"  Число Фурье Fo = a·t_end/L² = {Fo:.4g}")
+        if Fo < 0.5:
+            ap("    (Fo < 0.5 — процесс далёк от стационара)")
+        elif Fo > 3:
+            ap("    (Fo > 3 — процесс практически вышел в стационар)")
+    ap("")
+    ap("ГРАНИЧНЫЕ УСЛОВИЯ")
+    for face_id in range(6):
+        bc = problem.bcs[face_id]
+        ap(f"  {FACE_NAMES[face_id]}: {_bc_describe(bc)}")
+    ap("")
+    ap("ДИНАМИКА ПЕРЕХОДНОГО ПРОЦЕССА")
+    ap(f"  {'t, с':>12} | {'Tmin, °C':>10} | {'Tmean, °C':>10} | "
+       f"{'Tmax, °C':>10}")
+    ap("  " + "-" * 52)
+    for (t, tmin, tmean, tmax) in _transient_dynamics_table(times, T_history):
+        ap(f"  {t:>12.4g} | {tmin:>10.3f} | {tmean:>10.3f} | {tmax:>10.3f}")
+    ap("")
+    ap("АНАЛИЗ")
+    ap(f"  Характер процесса:        {summ['direction']}")
+    ap(f"  Средняя T:                {summ['T_mean_0']:.3f} °C → "
+       f"{summ['T_mean_end']:.3f} °C (Δ = {summ['dT_total']:+.3f} °C)")
+    if summ["rate_initial"] is not None:
+        ap(f"  Начальная скорость:       {summ['rate_initial']:+.4g} °C/с")
+    if summ["t63"] is not None:
+        ap(f"  Время 63.2 % изменения:   {summ['t63']:.4g} с")
+    if summ["t95"] is not None:
+        ap(f"  Время 95 % изменения:     {summ['t95']:.4g} с")
+    if summ["cooling_rate_m"] is not None:
+        ap(f"  Темп процесса m:          {summ['cooling_rate_m']:.4e} 1/с "
+           "(регулярный режим, ln θ ~ −m·t)")
+    if summ["settled"] is not None:
+        pct = summ["settled"] * 100.0
+        ap(f"  Выход на стационар:       ≈ {pct:.1f} % "
+           f"({'достигнут' if pct >= 95 else 'НЕ достигнут — увеличьте t_end'})")
+    ap("")
+    Tg_min = float(T_history.min())
+    Tg_max = float(T_history.max())
+    ap("ГЛОБАЛЬНЫЙ ДИАПАЗОН (шкала анимации)")
+    ap(f"  Tmin = {Tg_min:.4f} °C,  Tmax = {Tg_max:.4f} °C")
+    ap("")
+
+    # Точки наблюдения: T(t) по каждой точке.
+    obs = list(getattr(problem, "observation_points", []) or [])
+    if obs and problem.nodes is not None:
+        series = sample_history_at_points(problem.nodes, T_history, obs)
+        ap("ТОЧКИ НАБЛЮДЕНИЯ — T(t)")
+        n = len(times)
+        idxs = (np.arange(n) if n <= 15 else
+                np.unique(np.round(np.linspace(0, n - 1, 15)).astype(int)))
+        header = f"  {'t, с':>12}"
+        for i, (x, y, z) in enumerate(obs):
+            header += f" | #{i+1} ({x:.3g},{y:.3g},{z:.3g})"
+        ap(header)
+        ap("  " + "-" * max(40, len(header) - 2))
+        for k in idxs:
+            row = f"  {times[k]:>12.4g}"
+            for i in range(series.shape[0]):
+                row += f" | {series[i, k]:>10.3f} °C"
+            ap(row)
+        ap("")
+
+    ap("=" * 70)
+
+    with open(path, "w", encoding="utf-8") as fout:
+        fout.write("\n".join(lines))
+
+
+def export_transient_history_csv(problem: Problem, times: np.ndarray,
+                                 T_history: np.ndarray, path: str) -> None:
+    """CSV-выгрузка динамики: t; Tmin; Tmean; Tmax [; T в точках наблюдения]."""
+    times = np.asarray(times, dtype=np.float64)
+    T_history = np.asarray(T_history, dtype=np.float64)
+    obs = list(getattr(problem, "observation_points", []) or [])
+    series = None
+    if obs and problem.nodes is not None:
+        series = sample_history_at_points(problem.nodes, T_history, obs)
+    with open(path, "w", encoding="utf-8") as fout:
+        header = "t_s;T_min_C;T_mean_C;T_max_C"
+        for i in range(len(obs)):
+            x, y, z = obs[i]
+            header += f";T_obs{i+1}({x:g},{y:g},{z:g})_C"
+        fout.write(header + "\n")
+        for k in range(len(times)):
+            T = T_history[k]
+            row = (f"{times[k]:.6g};{T.min():.6f};"
+                   f"{T.mean():.6f};{T.max():.6f}")
+            if series is not None:
+                for i in range(series.shape[0]):
+                    row += f";{series[i, k]:.6f}"
+            fout.write(row + "\n")

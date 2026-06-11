@@ -128,6 +128,21 @@ class Visualization3D(QWidget):
         """Сменить цветовую палитру (viridis/inferno/plasma/coolwarm/jet/turbo)."""
         pass
 
+    # -------------------------------------------------------------------------
+    # Фиксированная цветовая шкала.
+    # -------------------------------------------------------------------------
+    # В нестационарном режиме шкала должна быть ОБЩЕЙ для всех кадров
+    # (глобальные Tmin/Tmax за всё время), иначе каждый кадр нормируется
+    # на собственный диапазон и рост/падение температуры визуально не виден:
+    # тело на каждом кадре выглядит одинаково «полностью раскрашенным».
+    def set_fixed_clim(self, tmin: float, tmax: float) -> None:
+        """Зафиксировать диапазон цветовой шкалы [tmin, tmax]."""
+        self._fixed_clim = (float(tmin), float(tmax))
+
+    def clear_fixed_clim(self) -> None:
+        """Вернуть автоматический диапазон (по текущему полю T)."""
+        self._fixed_clim = None
+
     def set_flux_field(self, flux: Optional[np.ndarray]) -> None:
         """Задать векторное поле потоков q (N, 3). None — снять."""
         pass
@@ -419,6 +434,10 @@ class PyVistaView(Visualization3D):
                 self._schedule_refresh()
                 return
             self._T_range = (float(self._T.min()), float(self._T.max()))
+            # Фиксированная шкала (нестационарная анимация): перекрываем
+            # авто-диапазон глобальным, чтобы кадры были сопоставимы.
+            if getattr(self, "_fixed_clim", None) is not None:
+                self._T_range = self._fixed_clim
             # Обновляем point_data на исходных сетках.
             if self._volume_unstructured is not None:
                 self._volume_unstructured.point_data["T"] = self._T
@@ -475,6 +494,19 @@ class PyVistaView(Visualization3D):
         if name == self._cmap:
             return
         self._cmap = name
+        self._needs_full_refresh = True
+        self._schedule_refresh()
+
+    def set_fixed_clim(self, tmin: float, tmax: float) -> None:
+        self._fixed_clim = (float(tmin), float(tmax))
+        self._T_range = self._fixed_clim
+        self._needs_full_refresh = True
+        self._schedule_refresh()
+
+    def clear_fixed_clim(self) -> None:
+        self._fixed_clim = None
+        if self._T is not None and getattr(self._T, "size", 0) > 0:
+            self._T_range = (float(self._T.min()), float(self._T.max()))
         self._needs_full_refresh = True
         self._schedule_refresh()
 
@@ -1132,10 +1164,13 @@ class MatplotlibView(Visualization3D):
         super().__init__(parent)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        self.fig = Figure(figsize=(7, 6), facecolor="#2a2e36")
+        from .theme import current_theme
+        _th = current_theme()
+        self.fig = Figure(figsize=(7, 6), facecolor=_th.viewport_bg)
         self.canvas = FigureCanvas(self.fig)
         self.toolbar = NavigationToolbar(self.canvas, self)
-        self.toolbar.setStyleSheet("background-color: #1a1d22; color: #dcdee2;")
+        self.toolbar.setStyleSheet(
+            f"background-color: {_th.panel}; color: {_th.text};")
         layout.addWidget(self.toolbar)
         layout.addWidget(self.canvas)
         self.ax = self.fig.add_subplot(111, projection="3d")
@@ -1175,11 +1210,14 @@ class MatplotlibView(Visualization3D):
         return "matplotlib"
 
     def _setup_axes(self):
-        self.ax.set_facecolor("#2a2e36")
+        from .theme import current_theme
+        from matplotlib.colors import to_rgba
+        th = current_theme()
+        self.ax.set_facecolor(th.viewport_bg)
         for axis in (self.ax.xaxis, self.ax.yaxis, self.ax.zaxis):
-            axis.label.set_color("#dcdee2")
-            axis.set_pane_color((0.16, 0.18, 0.21, 1.0))
-        self.ax.tick_params(colors="#dcdee2")
+            axis.label.set_color(th.text)
+            axis.set_pane_color(to_rgba(th.bg))
+        self.ax.tick_params(colors=th.text)
         self.ax.set_xlabel("x")
         self.ax.set_ylabel("y")
         self.ax.set_zlabel("z")
@@ -1218,6 +1256,14 @@ class MatplotlibView(Visualization3D):
         self._iso_count = max(2, min(20, int(n)))
         if self._render_mode == "isosurface":
             self._refresh_timer.start()
+
+    def set_fixed_clim(self, tmin: float, tmax: float) -> None:
+        self._fixed_clim = (float(tmin), float(tmax))
+        self._refresh_timer.start()
+
+    def clear_fixed_clim(self) -> None:
+        self._fixed_clim = None
+        self._refresh_timer.start()
 
     def set_colormap(self, name: str) -> None:
         if name == self._cmap:
@@ -1311,7 +1357,9 @@ class MatplotlibView(Visualization3D):
 
         if self._render_mode == "wireframe" and bnd is not None:
             from mpl_toolkits.mplot3d.art3d import Poly3DCollection
-            poly = Poly3DCollection(self._nodes[bnd], edgecolor="#dcdee2",
+            from .theme import current_theme as _ct_wf
+            poly = Poly3DCollection(self._nodes[bnd],
+                                    edgecolor=_ct_wf().text,
                                     facecolor="none", linewidths=0.4,
                                     alpha=0.6)
             self.ax.add_collection3d(poly)
@@ -1321,7 +1369,9 @@ class MatplotlibView(Visualization3D):
                 tri = self._nodes[bnd]
                 T_face = self._T[bnd].mean(axis=1)
                 # Логарифмическая шкала если возможно (Tmin > 0).
-                Tmin_v, Tmax_v = float(self._T.min()), float(self._T.max())
+                Tmin_v, Tmax_v = ((float(self._fixed_clim[0]), float(self._fixed_clim[1]))
+                                  if getattr(self, '_fixed_clim', None) is not None
+                                  else (float(self._T.min()), float(self._T.max())))
                 _lo, _hi = _padded_clim(Tmin_v, Tmax_v,
                                         self._log_scale and Tmin_v > 0.0)
                 if self._log_scale and Tmin_v > 0.0:
@@ -1347,7 +1397,9 @@ class MatplotlibView(Visualization3D):
         elif self._render_mode in ("isosurface", "volume"):
             if has_T and self._sample_indices is not None:
                 sample = self._sample_indices
-                Tmin_v, Tmax_v = float(self._T.min()), float(self._T.max())
+                Tmin_v, Tmax_v = ((float(self._fixed_clim[0]), float(self._fixed_clim[1]))
+                                  if getattr(self, '_fixed_clim', None) is not None
+                                  else (float(self._T.min()), float(self._T.max())))
                 _lo, _hi = _padded_clim(Tmin_v, Tmax_v,
                                         self._log_scale and Tmin_v > 0.0)
                 if self._log_scale and Tmin_v > 0.0:
@@ -1484,8 +1536,16 @@ class MatplotlibView(Visualization3D):
 
     def set_viewport_background(self, color: str) -> None:
         try:
+            from .theme import current_theme
+            th = current_theme()
             self.fig.set_facecolor(color)
             self.ax.set_facecolor(color)
+            # Перекраска осей и тулбара под новую тему (иначе светлые
+            # подписи теряются на светлом фоне и наоборот).
+            self._setup_axes()
+            self.toolbar.setStyleSheet(
+                f"background-color: {th.panel}; color: {th.text};")
+            self._refresh_timer.start()
             self.canvas.draw_idle()
         except Exception:
             pass

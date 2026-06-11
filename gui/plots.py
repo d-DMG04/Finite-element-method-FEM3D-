@@ -22,23 +22,27 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (QComboBox, QFrame, QHBoxLayout, QLabel,
                              QSizePolicy, QSplitter, QVBoxLayout, QWidget)
 
+from .theme import current_theme
+
 
 def _styled_figure() -> Figure:
-    fig = Figure(figsize=(7, 4), facecolor="#2a2e36")
+    """Фигура в цветах ТЕКУЩЕЙ темы (тёмная/светлая/бежевая)."""
+    th = current_theme()
+    fig = Figure(figsize=(7, 4), facecolor=th.panel)
     return fig
 
 
 def _style_ax(ax) -> None:
-    ax.set_facecolor("#1f2228")
-    ax.spines["bottom"].set_color("#5a606b")
-    ax.spines["top"].set_color("#5a606b")
-    ax.spines["left"].set_color("#5a606b")
-    ax.spines["right"].set_color("#5a606b")
-    ax.tick_params(colors="#dcdee2")
-    ax.xaxis.label.set_color("#dcdee2")
-    ax.yaxis.label.set_color("#dcdee2")
-    ax.title.set_color("#dcdee2")
-    ax.grid(True, color="#3c4049", alpha=0.5)
+    """Оси в цветах текущей темы — графики читаемы в любой теме."""
+    th = current_theme()
+    ax.set_facecolor(th.bg)
+    for side in ("bottom", "top", "left", "right"):
+        ax.spines[side].set_color(th.border_strong)
+    ax.tick_params(colors=th.text)
+    ax.xaxis.label.set_color(th.text)
+    ax.yaxis.label.set_color(th.text)
+    ax.title.set_color(th.text)
+    ax.grid(True, color=th.border, alpha=0.6)
 
 
 class PlotsView(QWidget):
@@ -90,13 +94,19 @@ class PlotsView(QWidget):
         self._flux = flux
         self._refresh()
 
+    def apply_theme(self) -> None:
+        """Перекрасить графики после смены темы приложения."""
+        self._refresh()
+
     def _refresh(self) -> None:
+        th = current_theme()
         self.fig.clear()
+        self.fig.set_facecolor(th.panel)
         ax = self.fig.add_subplot(111)
         _style_ax(ax)
         if self._T is None or self._nodes is None or self._T.size == 0:
             ax.text(0.5, 0.5, "Нет данных. Выполните расчёт.",
-                    ha="center", va="center", color="#9aa0a6", fontsize=11,
+                    ha="center", va="center", color=th.text_dim, fontsize=11,
                     transform=ax.transAxes)
             self.canvas.draw_idle()
             return
@@ -113,22 +123,23 @@ class PlotsView(QWidget):
 
     # -------------------------------------------------------------------------
     def _plot_histogram(self, ax) -> None:
-        ax.hist(self._T, bins=40, color="#7a6cf0", edgecolor="#1f2228")
+        th = current_theme()
+        ax.hist(self._T, bins=40, color=th.accent, edgecolor=th.bg)
         ax.set_xlabel("T, °C")
         ax.set_ylabel("Число узлов")
         ax.set_title("Распределение температуры по узлам сетки")
         Tmin, Tmax = float(self._T.min()), float(self._T.max())
         Tmean = float(self._T.mean())
-        ax.axvline(Tmean, color="#3aa55a", linestyle="--", linewidth=1.5,
+        ax.axvline(Tmean, color=th.run, linestyle="--", linewidth=1.5,
                    label=f"среднее: {Tmean:.2f} °C")
-        ax.legend(facecolor="#2a2e36", labelcolor="#dcdee2",
-                  edgecolor="#5a606b")
+        ax.legend(facecolor=th.panel, labelcolor=th.text,
+                  edgecolor=th.border_strong)
         ax.text(0.02, 0.97,
                 f"Tmin = {Tmin:.2f} °C\nTmax = {Tmax:.2f} °C\n"
                 f"размах = {Tmax - Tmin:.2f} °C",
-                transform=ax.transAxes, va="top", color="#dcdee2",
-                fontsize=9, bbox=dict(facecolor="#1f2228",
-                                       edgecolor="#5a606b"))
+                transform=ax.transAxes, va="top", color=th.text,
+                fontsize=9, bbox=dict(facecolor=th.panel,
+                                       edgecolor=th.border_strong))
 
     def _plot_profile(self, ax) -> None:
         axis = self.axis_combo.currentText()
@@ -154,24 +165,26 @@ class PlotsView(QWidget):
                 mins[i] = vals.min()
                 maxs[i] = vals.max()
         ok = ~np.isnan(means)
+        th = current_theme()
         ax.fill_between(centers[ok], mins[ok], maxs[ok],
-                        color="#7a6cf0", alpha=0.25, label="разброс")
-        ax.plot(centers[ok], means[ok], color="#7a6cf0", linewidth=2,
+                        color=th.accent, alpha=0.25, label="разброс")
+        ax.plot(centers[ok], means[ok], color=th.accent, linewidth=2,
                 label="среднее T(·)")
         ax.set_xlabel(f"{axis}, м")
         ax.set_ylabel("T, °C")
         ax.set_title(f"Профиль температуры вдоль оси {axis.upper()}")
-        ax.legend(facecolor="#2a2e36", labelcolor="#dcdee2",
-                  edgecolor="#5a606b")
+        ax.legend(facecolor=th.panel, labelcolor=th.text,
+                  edgecolor=th.border_strong)
 
     def _plot_flux_hist(self, ax) -> None:
+        th = current_theme()
         if self._flux is None:
             ax.text(0.5, 0.5, "Тепловые потоки не вычислены.",
-                    ha="center", va="center", color="#9aa0a6",
+                    ha="center", va="center", color=th.text_dim,
                     transform=ax.transAxes)
             return
         magnitude = np.linalg.norm(self._flux, axis=1)
-        ax.hist(magnitude, bins=40, color="#3a78d0", edgecolor="#1f2228")
+        ax.hist(magnitude, bins=40, color=th.robin, edgecolor=th.bg)
         ax.set_xlabel("|q|, Вт/м²")
         ax.set_ylabel("Число узлов")
         ax.set_title("Распределение модуля теплового потока")
@@ -179,6 +192,6 @@ class PlotsView(QWidget):
                 f"|q|min = {magnitude.min():.3g}\n"
                 f"|q|max = {magnitude.max():.3g}\n"
                 f"|q|среднее = {magnitude.mean():.3g}",
-                transform=ax.transAxes, va="top", color="#dcdee2",
-                fontsize=9, bbox=dict(facecolor="#1f2228",
-                                       edgecolor="#5a606b"))
+                transform=ax.transAxes, va="top", color=th.text,
+                fontsize=9, bbox=dict(facecolor=th.panel,
+                                       edgecolor=th.border_strong))
